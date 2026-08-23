@@ -1,9 +1,0 @@
-{
-  "type": "firstaid:static",
-  "damageTypes": ["magic"],
-  "algorithm": {
-    "type": "firstaid:random",
-    "nearestFirst": false,
-    "tryNoKill": false
-  }
-}

@@ -58,6 +58,17 @@ public class FirstAidConfig {
         CLIENT = specPair.getLeft();
     }
 
+    /**
+     * The server config is only actually populated once a world/server is loaded (it's a
+     * per-world config). Client-side rendering code can run against a player entity (e.g. a
+     * remote player being rendered) before that's happened -- callers that might run that
+     * early should check this first and fall back to {@link ModConfigSpec.ConfigValue#getDefault()}
+     * instead of {@code get()}.
+     */
+    public static boolean isServerConfigLoaded() {
+        return serverSpec.isLoaded();
+    }
+
     public static void applyCommandSettings() {
         migrateLegacyBandageApplyTime();
         FirstAid.dynamicPainEnabled = SERVER.dynamicPainEnabled.get();

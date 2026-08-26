@@ -84,6 +84,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class PlayerDamageModel
 extends AbstractPlayerDamageModel
@@ -233,9 +234,20 @@ implements LookupReloadListener {
     /** After rescue/respawn, suppress feedback audio until this reaches 0. */
     private int audioMuteTicks = 0;
 
+    /**
+     * The server config is a per-world config; it isn't loaded yet for a client that's
+     * rendering a player entity (e.g. another player) before joining/hosting a world with
+     * one loaded (or that never will, e.g. a client connected to a remote dedicated server).
+     * Attachments like this one can get lazily constructed by such rendering code, so reading
+     * the config value here has to tolerate that case instead of crashing via {@code get()}.
+     */
+    private static <T> T safeGet(ModConfigSpec.ConfigValue<T> value) {
+        return FirstAidConfig.isServerConfigLoaded() ? value.get() : value.getDefault();
+    }
+
     public PlayerDamageModel() {
-        super(new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthHead.get(), (Boolean)FirstAidConfig.SERVER.causeDeathHead.get(), EnumPlayerPart.HEAD), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthLeftArm.get(), false, EnumPlayerPart.LEFT_ARM), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthLeftLeg.get(), false, EnumPlayerPart.LEFT_LEG), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthLeftFoot.get(), false, EnumPlayerPart.LEFT_FOOT), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthBody.get(), (Boolean)FirstAidConfig.SERVER.causeDeathBody.get(), EnumPlayerPart.BODY), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthRightArm.get(), false, EnumPlayerPart.RIGHT_ARM), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthRightLeg.get(), false, EnumPlayerPart.RIGHT_LEG), new DamageablePart((Integer)FirstAidConfig.SERVER.maxHealthRightFoot.get(), false, EnumPlayerPart.RIGHT_FOOT));
-        this.noCritical = (Boolean)FirstAidConfig.SERVER.causeDeathBody.get() == false && (Boolean)FirstAidConfig.SERVER.causeDeathHead.get() == false;
+        super(new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthHead), safeGet(FirstAidConfig.SERVER.causeDeathHead), EnumPlayerPart.HEAD), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthLeftArm), false, EnumPlayerPart.LEFT_ARM), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthLeftLeg), false, EnumPlayerPart.LEFT_LEG), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthLeftFoot), false, EnumPlayerPart.LEFT_FOOT), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthBody), safeGet(FirstAidConfig.SERVER.causeDeathBody), EnumPlayerPart.BODY), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthRightArm), false, EnumPlayerPart.RIGHT_ARM), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthRightLeg), false, EnumPlayerPart.RIGHT_LEG), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthRightFoot), false, EnumPlayerPart.RIGHT_FOOT));
+        this.noCritical = !safeGet(FirstAidConfig.SERVER.causeDeathBody) && !safeGet(FirstAidConfig.SERVER.causeDeathHead);
         FirstAidRegistryLookups.registerReloadListener(this);
     }
 

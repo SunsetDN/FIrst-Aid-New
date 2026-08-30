@@ -658,8 +658,9 @@ public class FirstAidConfig {
                     .defineEnum("vanillaHealthBarMode", VanillaHealthbarMode.HIDE);
 
             overlayMode = builder
-                    .comment("The design to use to visualize the health")
-                    .defineEnum("overlayMode", OverlayMode.PLAYER_MODEL);
+                    .comment("The design to use to visualize the health",
+                            "Defaults to OFF since the hotbar-area health readout (see FirstaidIngameGui) already shows per-part bars persistently")
+                    .defineEnum("overlayMode", OverlayMode.OFF);
 
             pos = builder
                     .comment("The relative point of the overlay")

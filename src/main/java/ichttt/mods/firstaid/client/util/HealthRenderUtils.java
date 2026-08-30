@@ -194,7 +194,10 @@ public final class HealthRenderUtils {
     }
 
     public static int getHealthColor(AbstractDamageablePart damageablePart) {
-        float healthRatio = CommonUtils.getVisibleHealthRatio(damageablePart);
+        return getHealthColor(CommonUtils.getVisibleHealthRatio(damageablePart));
+    }
+
+    public static int getHealthColor(float healthRatio) {
         if (healthRatio > 0.85F) {
             return 0x63D56D;
         }

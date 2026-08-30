@@ -21,26 +21,40 @@ package ichttt.mods.firstaid.client.gui;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
-import ichttt.mods.firstaid.client.util.HeartSpriteHelper;
+import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.client.util.HealthRenderUtils;
 import ichttt.mods.firstaid.common.util.CommonUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.util.Mth;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
 
+import java.util.EnumMap;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Renders a Tarkov-style per-body-part health readout (label + bar + current/max number)
+ * in place of the vanilla heart row.
+ */
 public final class FirstaidIngameGui {
-    private static int lastHealth = -1;
-    private static int blinkUntilTick;
-    private static Player lastPlayer;
-    private static Level lastLevel;
-    private static final RandomSource RANDOM = RandomSource.create();
+    private static final EnumPlayerPart[] DISPLAY_ORDER = {
+            EnumPlayerPart.HEAD, EnumPlayerPart.BODY,
+            EnumPlayerPart.LEFT_ARM, EnumPlayerPart.RIGHT_ARM,
+            EnumPlayerPart.LEFT_LEG, EnumPlayerPart.RIGHT_LEG,
+            EnumPlayerPart.LEFT_FOOT, EnumPlayerPart.RIGHT_FOOT
+    };
+    private static final int ROWS = DISPLAY_ORDER.length + 1; // +1 for the aggregate "HP" row
+    private static final int ROW_HEIGHT = 9;
+    private static final int BAR_WIDTH = 90;
+    private static final int BAR_HEIGHT = 5;
+
+    private static final Map<EnumPlayerPart, String> LABELS = new EnumMap<>(EnumPlayerPart.class);
+    private static int labelWidth = -1;
 
     private FirstaidIngameGui() {
     }
@@ -54,111 +68,65 @@ public final class FirstaidIngameGui {
 
         reserveHealthBarSpace(gui, player);
 
-        AbstractPlayerDamageModel damageModel = CommonUtils.getOptionalDamageModel(minecraft.player).orElse(null);
-        int criticalHalfHearts = 0;
-        if (damageModel != null) {
-            float criticalHealth = Float.MAX_VALUE;
-            for (AbstractDamageablePart part : damageModel) {
-                if (part.canCauseDeath) {
-                    criticalHealth = Math.min(criticalHealth, part.currentHealth);
-                }
-            }
-            criticalHealth = (criticalHealth / (float) damageModel.getCurrentMaxHealth()) * minecraft.player.getMaxHealth();
-            criticalHalfHearts = Mth.ceil(criticalHealth);
+        AbstractPlayerDamageModel damageModel = CommonUtils.getOptionalDamageModel(player).orElse(null);
+        if (damageModel == null) {
+            return;
         }
 
-        int health = Mth.ceil(getModelDisplayHealth(player, damageModel));
-        boolean healthBlink = updateHealthBlink(player, health);
-        AttributeInstance attrMaxHealth = player.getAttribute(Attributes.MAX_HEALTH);
-        float healthMax = Math.max((float) attrMaxHealth.getValue(), health);
-        int absorption = Mth.ceil(player.getAbsorptionAmount());
+        if (labelWidth < 0) {
+            buildLabels(minecraft);
+        }
 
         int left = width / 2 - 91;
-        int rowHeight = getRowHeight(player);
         int top = height - gui.leftHeight + getReservedOffset(player);
+        int barX = left + labelWidth + 4;
 
-        int regen = player.hasEffect(MobEffects.REGENERATION)
-                ? player.tickCount % Mth.ceil(healthMax + 5.0F)
-                : -1;
-        RANDOM.setSeed((long) player.tickCount * 312871L);
+        AttributeInstance attrMaxHealth = player.getAttribute(Attributes.MAX_HEALTH);
+        float overallMax = Math.max((float) attrMaxHealth.getValue(), player.getHealth());
+        float overallCurrent = Mth.clamp(getModelDisplayHealth(player, damageModel), 0.0F, overallMax);
+        float overallRatio = overallMax <= 0.0F ? 0.0F : overallCurrent / overallMax;
+        int overallColor = HealthRenderUtils.getHealthColor(overallRatio);
 
-        float absorptionRemaining = absorption;
-        for (int i = Mth.ceil((healthMax + absorption) / 2.0F) - 1; i >= 0; --i) {
-            boolean criticalHalf = (i * 2) + 1 == criticalHalfHearts;
-            boolean criticalBlink = i * 2 < criticalHalfHearts && !criticalHalf;
-            boolean spriteBlink = criticalBlink || healthBlink;
-            int row = Mth.ceil((float) (i + 1) / 10.0F) - 1;
-            int x = left + i % 10 * 8;
-            int y = top - row * rowHeight;
-            if (health <= 4) {
-                y += RANDOM.nextInt(2);
-            }
-            if (i == regen) {
-                y -= 2;
-            }
+        int y = top;
+        guiGraphics.drawString(minecraft.font, "HP", left, y + 1, 0xFFFFFF, false);
+        drawBar(guiGraphics, barX, y, overallRatio, overallColor);
+        String overallText = HealthRenderUtils.TEXT_FORMAT.format(overallCurrent) + "/" + Mth.ceil(overallMax);
+        guiGraphics.drawString(minecraft.font, overallText, barX + BAR_WIDTH + 4, y + 1, overallColor, false);
+        y += ROW_HEIGHT;
 
-            guiGraphics.blitSprite(HeartSpriteHelper.container(player, spriteBlink), x, y, 9, 9);
-
-            if (absorptionRemaining > 0.0F) {
-                boolean halfAbsorption = absorptionRemaining == absorption && absorption % 2 == 1;
-                guiGraphics.blitSprite(
-                        halfAbsorption
-                                ? HeartSpriteHelper.heart(player, true, true, spriteBlink)
-                                : HeartSpriteHelper.heart(player, true, false, spriteBlink),
-                        x, y, 9, 9);
-                absorptionRemaining -= absorptionRemaining == absorption && absorption % 2 == 1 ? 1.0F : 2.0F;
-                continue;
-            }
-
-            if (criticalHalf) {
-                guiGraphics.blitSprite(HeartSpriteHelper.heart(player, false, true, true), x, y, 9, 9);
-            }
-            if (i * 2 + 1 < health) {
-                guiGraphics.blitSprite(HeartSpriteHelper.heart(player, false, false, spriteBlink), x, y, 9, 9);
-            } else if (i * 2 + 1 == health && !criticalHalf) {
-                guiGraphics.blitSprite(HeartSpriteHelper.heart(player, false, true, spriteBlink), x, y, 9, 9);
-            }
+        for (EnumPlayerPart part : DISPLAY_ORDER) {
+            AbstractDamageablePart damageablePart = damageModel.getFromEnum(part);
+            guiGraphics.drawString(minecraft.font, LABELS.get(part), left, y + 1, 0xFFFFFF, false);
+            float ratio = CommonUtils.getVisibleHealthRatio(damageablePart);
+            drawBar(guiGraphics, barX, y, ratio, HealthRenderUtils.getHealthColor(damageablePart));
+            HealthRenderUtils.drawHealthString(guiGraphics, minecraft.font, damageablePart, barX + BAR_WIDTH + 4, y + 1, false);
+            y += ROW_HEIGHT;
         }
     }
 
-    private static boolean updateHealthBlink(Player player, int health) {
-        int tick = player.tickCount;
-        if (lastPlayer != player || lastLevel != player.level() || lastHealth < 0 || !player.isAlive()) {
-            lastPlayer = player;
-            lastLevel = player.level();
-            lastHealth = health;
-            blinkUntilTick = 0;
-            return false;
+    private static void drawBar(GuiGraphics guiGraphics, int x, int y, float ratio, int color) {
+        int fillWidth = Math.round(BAR_WIDTH * Mth.clamp(ratio, 0.0F, 1.0F));
+        guiGraphics.fill(x, y, x + BAR_WIDTH, y + BAR_HEIGHT, 0xAA000000);
+        if (fillWidth > 0) {
+            guiGraphics.fill(x, y, x + fillWidth, y + BAR_HEIGHT, 0xFF000000 | color);
         }
-        if (health < lastHealth) blinkUntilTick = tick + 20;
-        else if (health > lastHealth) blinkUntilTick = tick + 10;
-        lastHealth = health;
-        return blinkUntilTick > tick && (blinkUntilTick - tick) / 3 % 2 == 1;
+    }
+
+    private static synchronized void buildLabels(Minecraft minecraft) {
+        labelWidth = 0;
+        for (EnumPlayerPart part : EnumPlayerPart.VALUES) {
+            String translated = I18n.get("firstaid.gui." + part.toString().toLowerCase(Locale.ENGLISH));
+            labelWidth = Math.max(labelWidth, minecraft.font.width(translated));
+            LABELS.put(part, translated);
+        }
     }
 
     public static void reserveHealthBarSpace(Gui gui, Player player) {
-        int healthRows = getHealthRows(player);
-        int rowHeight = getRowHeight(player);
-        gui.leftHeight += healthRows * rowHeight;
-        if (rowHeight != 10) {
-            gui.leftHeight += 10 - rowHeight;
-        }
+        gui.leftHeight += ROWS * ROW_HEIGHT;
     }
 
     private static int getReservedOffset(Player player) {
-        return getHealthRows(player) * getRowHeight(player) + Math.max(0, 10 - getRowHeight(player));
-    }
-
-    private static int getHealthRows(Player player) {
-        int health = Mth.ceil(player.getHealth());
-        AttributeInstance attrMaxHealth = player.getAttribute(Attributes.MAX_HEALTH);
-        float healthMax = Math.max((float) attrMaxHealth.getValue(), health);
-        int absorption = Mth.ceil(player.getAbsorptionAmount());
-        return Mth.ceil((healthMax + absorption) / 2.0F / 10.0F);
-    }
-
-    private static int getRowHeight(Player player) {
-        return Math.max(10 - (getHealthRows(player) - 2), 3);
+        return ROWS * ROW_HEIGHT;
     }
 
     private static float getModelDisplayHealth(Player player, AbstractPlayerDamageModel damageModel) {

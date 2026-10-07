@@ -1,9 +1,16 @@
 // AGENT-DONE(claude): tarkov-health-engine
 package ichttt.mods.firstaid.common.health;
 
+import ichttt.mods.firstaid.FirstAid;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
+import ichttt.mods.firstaid.common.util.CommonUtils;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.entity.player.Player;
 
 import javax.annotation.Nullable;
@@ -22,6 +29,12 @@ import javax.annotation.Nullable;
 public final class HealthUnits {
     /** Vanilla health used to express pain/feedback thresholds that were tuned for a 20 hit point player. */
     public static final float VANILLA_REFERENCE_HEALTH = 20.0F;
+
+    /**
+     * Damage types in this tag carry limb hit points instead of vanilla health: a gun whose damage value is 50 removes
+     * 50 hit points from the limb it hits. Empty by default (everything is balanced for vanilla health).
+     */
+    public static final TagKey<DamageType> RAW_DAMAGE = TagKey.create(Registries.DAMAGE_TYPE, ResourceLocation.fromNamespaceAndPath(FirstAid.MODID, "raw_damage"));
 
     private HealthUnits() {
     }
@@ -67,6 +80,10 @@ public final class HealthUnits {
 
     public static float engineHpPerVanillaHp(Player player, @Nullable AbstractPlayerDamageModel model) {
         if (model == null) {
+            return 1.0F;
+        }
+        DamageSource active = CommonUtils.getActiveDamageSource();
+        if (active != null && active.is(RAW_DAMAGE)) {
             return 1.0F;
         }
         return engineHpPerVanillaHp(isRaw(), model.getCurrentMaxHealth(), player.getMaxHealth());

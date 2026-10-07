@@ -291,6 +291,37 @@ public class FirstAidGameTests {
         });
     }
 
+    // Own batch: it switches friendly random distribution off, a static the other tests rely on being on.
+    @GameTest(template = EMPTY, batch = "locationalHits", timeoutTicks = 200)
+    public static void gunStyleHitsLandWhereTheyHitWithBothDamageParts(GameTestHelper helper) {
+        ServerPlayer player = survivalPlayer(helper);
+        FirstAid.useFriendlyRandomDistribution = false;
+        PlayerDamageModel model = model(helper, player);
+        Arrow bullet = helper.spawn(EntityType.ARROW, 1, 1, 1);
+        // A damage type that is NOT in minecraft:is_projectile with a projectile as direct cause: how TACZ bullets arrive
+        DamageSource gunShot = player.damageSources().source(net.minecraft.world.damagesource.DamageTypes.MAGIC, bullet, null);
+        helper.runAfterDelay(SPAWN_PROTECTION_TICKS, () -> {
+            ichttt.mods.firstaid.common.EventHandler.recordProjectileHit(player, bullet, player.getEyePosition());
+            // one shot, two hurt() calls in the same tick (normal part, armor piercing part)
+            player.invulnerableTime = 0; // TACZ clears the invulnerability frames before each part as well
+            helper.assertTrue(player.hurt(gunShot, 0.5F), "first part rejected");
+            player.invulnerableTime = 0;
+            helper.assertTrue(player.hurt(gunShot, 0.5F), "second part rejected");
+            float headLost = model.HEAD.getMaxHealth() - model.HEAD.currentHealth;
+            near(helper, "both parts hit the head", headLost, 2 * 0.5F * HealthUnits.engineHpPerVanillaHp(player, model), 0.5F);
+            for (AbstractDamageablePart part : model) {
+                if (part != model.HEAD) {
+                    helper.assertTrue(part.currentHealth >= part.getMaxHealth() - 0.001F, part.part + " was damaged by a headshot");
+                }
+            }
+            FirstAid.friendlyRandomDistributionChance = 1.0F;
+            FirstAid.useFriendlyRandomDistribution = true;
+            bullet.discard();
+            leave(helper, player);
+            helper.succeed();
+        });
+    }
+
     @GameTest(template = EMPTY)
     public static void lethalWritesKillThroughTheLimbModel(GameTestHelper helper) {
         ServerPlayer player = survivalPlayer(helper);

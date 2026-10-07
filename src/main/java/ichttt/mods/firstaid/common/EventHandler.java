@@ -45,7 +45,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
@@ -109,6 +111,8 @@ public class EventHandler {
     private static final int DEFIBRILLATOR_RESCUE_DURATION_TICKS = PlayerDamageModel.getDefibrillatorRescueDurationTicks();
     private static final int EXECUTION_DURATION_TICKS = PlayerDamageModel.getExecutionDurationTicks();
 
+    /** Damage types in this tag always use the recorded hit location, even while friendly random distribution is on. */
+    public static final TagKey<DamageType> PRECISE_HIT = TagKey.create(Registries.DAMAGE_TYPE, ResourceLocation.fromNamespaceAndPath(FirstAid.MODID, "precise_hit"));
     public static final Map<Player, ProjectileHitContext> hitList = new WeakHashMap<>();
     private static final Map<UUID, RescueProgress> rescueProgress = new HashMap<>();
     private static final Map<UUID, ExecutionProgress> executionProgress = new HashMap<>();
@@ -159,13 +163,16 @@ public class EventHandler {
             damageDistribution = FirstAidRegistryLookups.getDamageDistributions(source.type());
         }
 
-        if (source.is(DamageTypeTags.IS_PROJECTILE) && !hasForcedDamageDistribution) {
+        if (isProjectileDamage(source) && !hasForcedDamageDistribution) {
             Entity directEntity = source.getDirectEntity();
-            if (FirstAid.shouldUseFriendlyRandomDistribution()) {
-                hitList.remove(player);
+            // The hit context is kept until the end of the tick: one gun shot can hurt twice (normal + armor piercing part)
+            // and both parts have to land on the same limb.
+            ProjectileHitContext knownHit = hitList.get(player);
+            boolean preciseHit = knownHit != null && knownHit.projectile() == directEntity && source.is(PRECISE_HIT);
+            if (FirstAid.shouldUseFriendlyRandomDistribution() && !preciseHit) {
                 damageDistribution = RandomDamageDistributionAlgorithm.NEAREST_NOKILL;
             } else {
-                ProjectileHitContext projectileHitContext = hitList.remove(player);
+                ProjectileHitContext projectileHitContext = knownHit;
                 if (projectileHitContext != null && projectileHitContext.projectile() == directEntity) {
                     IDamageDistributionAlgorithm projectileDistribution = PlayerSizeHelper.getProjectileDistribution(player, projectileHitContext.hitPosition());
                     if (projectileDistribution != null) {
@@ -205,8 +212,15 @@ public class EventHandler {
         boolean redistributeLeftoverDamage = shouldRedistributeLeftoverDamage(source);
         CommonUtils.runWithoutSetHealthInterception(
                 () -> DamageDistribution.handleDamageTaken(finalDamageDistribution, damageModel, finalAmountToDamage, player, source, addStat, redistributeLeftoverDamage));
-        hitList.remove(player);
         return true;
+    }
+
+    /**
+     * Projectiles hit by their own movement logic (TACZ bullets never go through Projectile#onHit and their damage types
+     * are not in the vanilla projectile tag) still count as projectiles for locational damage.
+     */
+    public static boolean isProjectileDamage(DamageSource source) {
+        return source.is(DamageTypeTags.IS_PROJECTILE) || source.getDirectEntity() instanceof Projectile;
     }
 
     public static IDamageDistributionAlgorithm getForcedDamageDistribution(DamageSource source) {

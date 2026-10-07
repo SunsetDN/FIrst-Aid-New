@@ -172,9 +172,13 @@ sourceSets.main.java.exclude(
         'ichttt/mods/firstaid/common/network/MessageConfiguration.java',
         'ichttt/mods/firstaid/common/network/MessagePlayHurtSound.java',
         'ichttt/mods/firstaid/common/network/MessageUpdatePart.java',
-        'ichttt/mods/firstaid/common/SynchedEntityDataWrapper.java',
         'ichttt/mods/firstaid/common/compat/playerrevive/PlayerReviveEventHandler.java'
 )
+// Game tests (run with ./gradlew runGameTestServer) live next to the mod but are not shipped in the jar.
+tasks.named('jar') {
+    exclude 'ichttt/mods/firstaid/gametest/**'
+    exclude 'data/firstaid/structure/empty.nbt'
+}
 // To avoid having to run "generateModMetadata" manually, make it run on every project reload
 neoForge.ideSyncTask generateModMetadata
 

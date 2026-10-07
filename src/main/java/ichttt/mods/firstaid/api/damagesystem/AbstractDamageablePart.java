@@ -30,6 +30,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public abstract class AbstractDamageablePart implements INBTSerializable<CompoundTag> {
+    /** No bleed on this part. */
+    public static final byte BLEED_NONE = 0;
+    /** Slow bleed, stopped by bandages/plasters (and anything stronger). */
+    public static final byte BLEED_LIGHT = 1;
+    /** Fast bleed, needs a tourniquet (limbs) or a trauma kit (any part). */
+    public static final byte BLEED_HEAVY = 2;
+
     public final int initialMaxHealth;
     public final boolean canCauseDeath;
     @Nonnull
@@ -37,6 +44,10 @@ public abstract class AbstractDamageablePart implements INBTSerializable<Compoun
     @Nullable
     public AbstractPartHealer activeHealer;
     public float currentHealth;
+    /** One of {@link #BLEED_NONE}, {@link #BLEED_LIGHT}, {@link #BLEED_HEAVY}. */
+    public byte bleedLevel = BLEED_NONE;
+    /** True while the bone of this part is broken. Only arms, legs and feet can fracture. */
+    public boolean fractured;
 
     public AbstractDamageablePart(int maxHealth, boolean canCauseDeath, @Nonnull EnumPlayerPart playerPart) {
         this.initialMaxHealth = maxHealth;

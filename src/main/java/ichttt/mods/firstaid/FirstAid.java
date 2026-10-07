@@ -202,6 +202,9 @@ public class FirstAid {
         if (event.getTabKey().equals(RegistryObjects.CREATIVE_TAB.getKey())) {
             event.accept(RegistryObjects.BANDAGE);
             event.accept(RegistryObjects.PLASTER);
+            event.accept(RegistryObjects.TOURNIQUET);
+            event.accept(RegistryObjects.SPLINT);
+            event.accept(RegistryObjects.TRAUMA_KIT);
             event.accept(RegistryObjects.DEFIBRILLATOR);
             event.accept(RegistryObjects.ADRENALINE_INJECTOR);
             event.accept(RegistryObjects.MORPHINE_INJECTOR);

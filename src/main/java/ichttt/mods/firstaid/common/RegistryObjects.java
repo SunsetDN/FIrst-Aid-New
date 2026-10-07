@@ -20,7 +20,11 @@ package ichttt.mods.firstaid.common;
 
 import ichttt.mods.firstaid.FirstAid;
 import ichttt.mods.firstaid.FirstAidConfig;
+import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.healing.ItemHealing;
+import ichttt.mods.firstaid.api.healing.PartHealingContext;
+import ichttt.mods.firstaid.common.health.InjuryEngine;
+import ichttt.mods.firstaid.common.items.ItemTreatment;
 import ichttt.mods.firstaid.common.damagesystem.PartHealer;
 import ichttt.mods.firstaid.common.items.ItemAdrenalineInjector;
 import ichttt.mods.firstaid.common.items.ItemMorphine;
@@ -50,6 +54,9 @@ public class RegistryObjects {
 
     public static final DeferredItem<ItemHealing> BANDAGE;
     public static final DeferredItem<ItemHealing> PLASTER;
+    public static final DeferredItem<ItemHealing> TOURNIQUET;
+    public static final DeferredItem<ItemHealing> SPLINT;
+    public static final DeferredItem<ItemHealing> TRAUMA_KIT;
     public static final DeferredItem<Item> DEFIBRILLATOR;
     public static final DeferredItem<ItemAdrenalineInjector> ADRENALINE_INJECTOR;
     public static final DeferredItem<ItemMorphineInjector> MORPHINE_INJECTOR;
@@ -77,19 +84,57 @@ public class RegistryObjects {
         FirstAidConfig.Server server = FirstAidConfig.SERVER;
 
         // ITEMS
-        BANDAGE = ITEM_REGISTER.registerItem("bandage", properties -> ItemHealing.create(
+        // Bandage and plaster restore hit points and, once the treatment is done, close a light bleed on that part.
+        BANDAGE = ITEM_REGISTER.registerItem("bandage", properties -> new ItemTreatment(
                 properties.stacksTo(16),
                 stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.bandage.secondsPerHeal.get() * 20), server.bandage.totalHeals::get, stack),
-                stack -> server.bandage.applyTime.get(),
-                stack -> getBandageUseSound(),
-                stack -> ItemHealing.ApplySoundMode.WHILE_USING
+                server.bandage.applyTime::get,
+                (part, missingHealth) -> missingHealth || part.bleedLevel == AbstractDamageablePart.BLEED_LIGHT,
+                context -> closeBleed(context, AbstractDamageablePart.BLEED_LIGHT),
+                RegistryObjects::getBandageUseSound,
+                null
         ));
-        PLASTER = ITEM_REGISTER.registerItem("plaster", properties -> ItemHealing.create(
+        PLASTER = ITEM_REGISTER.registerItem("plaster", properties -> new ItemTreatment(
                 properties.stacksTo(16),
                 stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.plaster.secondsPerHeal.get() * 20), server.plaster.totalHeals::get, stack),
-                stack -> server.plaster.applyTime.get(),
-                stack -> getBandageUseSound(),
-                stack -> ItemHealing.ApplySoundMode.WHILE_USING
+                server.plaster.applyTime::get,
+                (part, missingHealth) -> missingHealth || part.bleedLevel == AbstractDamageablePart.BLEED_LIGHT,
+                context -> closeBleed(context, AbstractDamageablePart.BLEED_LIGHT),
+                RegistryObjects::getBandageUseSound,
+                null
+        ));
+        // A tourniquet only exists for limbs, but it stops any bleed there.
+        TOURNIQUET = ITEM_REGISTER.registerItem("tourniquet", properties -> new ItemTreatment(
+                properties.stacksTo(8),
+                stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.tourniquet.secondsPerHeal.get() * 20), server.tourniquet.totalHeals::get, stack),
+                server.tourniquet.applyTime::get,
+                (part, missingHealth) -> InjuryEngine.isLimb(part.part) && part.bleedLevel != AbstractDamageablePart.BLEED_NONE,
+                context -> closeBleed(context, AbstractDamageablePart.BLEED_HEAVY),
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.tourniquet"
+        ));
+        SPLINT = ITEM_REGISTER.registerItem("splint", properties -> new ItemTreatment(
+                properties.stacksTo(8),
+                stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.splint.secondsPerHeal.get() * 20), server.splint.totalHeals::get, stack),
+                server.splint.applyTime::get,
+                (part, missingHealth) -> part.fractured,
+                context -> {
+                    if (InjuryEngine.fixFracture(context.getDamageablePart())) {
+                        context.getDamageModel().scheduleResync();
+                    }
+                },
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.splint"
+        ));
+        // Heals the chosen part quickly and closes every bleed on it, including the heavy bleeds of head and body.
+        TRAUMA_KIT = ITEM_REGISTER.registerItem("trauma_kit", properties -> new ItemTreatment(
+                properties.stacksTo(4),
+                stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.traumaKit.secondsPerHeal.get() * 20), server.traumaKit.totalHeals::get, stack),
+                server.traumaKit.applyTime::get,
+                (part, missingHealth) -> missingHealth || part.bleedLevel != AbstractDamageablePart.BLEED_NONE,
+                context -> closeBleed(context, AbstractDamageablePart.BLEED_HEAVY),
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.trauma_kit"
         ));
         DEFIBRILLATOR = ITEM_REGISTER.registerItem("defibrillator", properties -> new Item(properties.durability(3)));
         ADRENALINE_INJECTOR = ITEM_REGISTER.registerItem("adrenaline_injector", ItemAdrenalineInjector::new);
@@ -141,6 +186,12 @@ public class RegistryObjects {
 
     private static SoundEvent getBandageUseSound() {
         return BANDAGE_USE.value();
+    }
+
+    private static void closeBleed(PartHealingContext context, byte strongestLevelStopped) {
+        if (InjuryEngine.stopBleed(context.getDamageablePart(), strongestLevelStopped)) {
+            context.getDamageModel().scheduleResync();
+        }
     }
 }
 

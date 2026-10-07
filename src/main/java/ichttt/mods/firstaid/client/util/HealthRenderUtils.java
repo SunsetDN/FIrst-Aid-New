@@ -69,6 +69,29 @@ public final class HealthRenderUtils {
         guiGraphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
+    private static final int BLEED_LIGHT_COLOR = 0xFF6060;
+    private static final int BLEED_HEAVY_COLOR = 0xFF1E1E;
+    private static final int FRACTURE_COLOR = 0xFFD34D;
+
+    /**
+     * Draws the injury markers of a part right aligned to {@code rightX}: B = light bleed, BB = heavy bleed, F = fracture.
+     * Plain ASCII on purpose so they render with every font and resource pack.
+     */
+    public static void drawInjuryMarkers(GuiGraphics guiGraphics, Font font, AbstractDamageablePart damageablePart, int rightX, int y) {
+        int x = rightX;
+        if (damageablePart.fractured) {
+            x -= font.width("F");
+            guiGraphics.drawString(font, "F", x, y, FRACTURE_COLOR, false);
+            x -= 3;
+        }
+        if (damageablePart.bleedLevel != AbstractDamageablePart.BLEED_NONE) {
+            boolean heavy = damageablePart.bleedLevel == AbstractDamageablePart.BLEED_HEAVY;
+            String marker = heavy ? "BB" : "B";
+            x -= font.width(marker);
+            guiGraphics.drawString(font, marker, x, y, heavy ? BLEED_HEAVY_COLOR : BLEED_LIGHT_COLOR, false);
+        }
+    }
+
     public static void drawHealthString(GuiGraphics guiGraphics, Font font, AbstractDamageablePart damageablePart, int xTranslation, int yTranslation, boolean allowSecondLine) {
         int healthColor = getHealthColor(damageablePart);
         String text = TEXT_FORMAT.format(CommonUtils.getVisualHealth(damageablePart)) + "/" + damageablePart.getMaxHealth();

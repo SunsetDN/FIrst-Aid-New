@@ -1,5 +1,6 @@
 package ichttt.mods.firstaid.api.healing;
 
+import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPartHealer;
 import java.util.function.Function;
 import javax.annotation.Nonnull;
@@ -78,6 +79,14 @@ public abstract class ItemHealing extends Item {
 
    public ItemHealing.ApplySoundMode getApplySoundMode(ItemStack stack) {
       return ItemHealing.ApplySoundMode.ON_COMPLETE;
+   }
+
+   /**
+    * Whether this item can be applied to the given part right now. By default that is every part that is missing
+    * hit points; items that treat other injuries (bleeds, fractures) override this.
+    */
+   public boolean canTreat(AbstractDamageablePart part) {
+      return HealingItemApiHelper.INSTANCE.needsHealing(part);
    }
 
    public void onTreatmentStarted(PartHealingContext context) {

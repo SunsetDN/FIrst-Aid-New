@@ -25,6 +25,7 @@ import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.distribution.IDamageDistributionAlgorithm;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
+import ichttt.mods.firstaid.common.health.HealthUnits;
 import ichttt.mods.firstaid.common.util.CommonUtils;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.damagesource.DamageSource;
@@ -56,9 +57,11 @@ public class DirectDamageDistributionAlgorithm implements IDamageDistributionAlg
         }
         AbstractDamageablePart targetPart = damageModel.getFromEnum(part);
         float damageMultiplier = DamageDistribution.getIncomingPartDamageMultiplier(damageModel, targetPart);
-        float scaledDamage = damage * damageMultiplier;
+        // damage is in vanilla units, limb hit points are not (see HealthUnits)
+        float unit = HealthUnits.engineHpPerVanillaHp(player, damageModel);
+        float scaledDamage = damage * damageMultiplier * unit;
         float scaledLeft = targetPart.damage(scaledDamage, player, debuff);
-        return Math.min(damage, DamageDistribution.restoreOriginalDamageScale(scaledLeft, damageMultiplier));
+        return Math.min(damage, DamageDistribution.restoreOriginalDamageScale(scaledLeft, damageMultiplier * unit));
     }
 
     @Override

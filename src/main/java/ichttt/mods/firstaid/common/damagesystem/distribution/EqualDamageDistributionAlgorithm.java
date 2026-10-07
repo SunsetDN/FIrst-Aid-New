@@ -28,6 +28,7 @@ import ichttt.mods.firstaid.api.distribution.IDamageDistributionAlgorithm;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.common.RegistryObjects;
 import ichttt.mods.firstaid.common.init.FirstAidDataAttachments;
+import ichttt.mods.firstaid.common.health.HealthUnits;
 import ichttt.mods.firstaid.common.util.ArmorUtils;
 import ichttt.mods.firstaid.common.util.CommonUtils;
 import ichttt.mods.firstaid.common.util.LoggingMarkers;
@@ -96,6 +97,8 @@ public class EqualDamageDistributionAlgorithm implements IDamageDistributionAlgo
 
     private DistributionResult distributeOnParts(float damage, AbstractPlayerDamageModel damageModel, Player player, boolean tryNoKillThisRound) {
         int iterationCounter = 0;
+        // damage is in vanilla units, limb hit points are not (see HealthUnits)
+        float unit = HealthUnits.engineHpPerVanillaHp(player, damageModel);
         int divCount = EnumPlayerPart.VALUES.length;
         float prevDamageLeft;
         float damageLeft = damage;
@@ -111,10 +114,10 @@ public class EqualDamageDistributionAlgorithm implements IDamageDistributionAlgo
             for (AbstractDamageablePart part : damageModel) {
                 if (part.currentHealth > 0F) {
                     float damageMultiplier = DamageDistribution.getIncomingPartDamageMultiplier(damageModel, part);
-                    float scaledDamage = toDamage * damageMultiplier;
+                    float scaledDamage = toDamage * damageMultiplier * unit;
                     float scaledLeft = part.damage(scaledDamage, player, !player.hasEffect(RegistryObjects.PAINKILLER_EFFECT), tryNoKillThisRound ? 1F : 0F);
-                    effectiveDamageDone += scaledDamage - scaledLeft;
-                    damageLeft += Math.min(toDamage, DamageDistribution.restoreOriginalDamageScale(scaledLeft, damageMultiplier));
+                    effectiveDamageDone += (scaledDamage - scaledLeft) / unit;
+                    damageLeft += Math.min(toDamage, DamageDistribution.restoreOriginalDamageScale(scaledLeft, damageMultiplier * unit));
                     divCount++;
                 }
             }

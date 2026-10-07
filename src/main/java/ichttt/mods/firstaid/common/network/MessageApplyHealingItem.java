@@ -88,7 +88,7 @@ public class MessageApplyHealingItem implements CustomPacketPayload {
                 }
 
                 AbstractDamageablePart damageablePart = damageModel.getFromEnum(message.part);
-                if (damageablePart.activeHealer != null || CommonUtils.isPartVisuallyFull(damageablePart) || stack.getCount() < 1) {
+                if (damageablePart.activeHealer != null || !itemHealing.canTreat(damageablePart) || stack.getCount() < 1) {
                     return;
                 }
 

@@ -27,6 +27,7 @@ import ichttt.mods.firstaid.common.damagesystem.distribution.DamageDistribution;
 import ichttt.mods.firstaid.common.damagesystem.distribution.HealthDistribution;
 import ichttt.mods.firstaid.common.damagesystem.distribution.RandomDamageDistributionAlgorithm;
 import ichttt.mods.firstaid.common.damagesystem.distribution.StandardDamageDistributionAlgorithm;
+import ichttt.mods.firstaid.common.health.HealthUnits;
 import ichttt.mods.firstaid.common.init.FirstAidDataAttachments;
 import ichttt.mods.firstaid.common.network.MessageSyncCommandSettings;
 import ichttt.mods.firstaid.common.registries.FirstAidRegistryLookups;
@@ -367,6 +368,14 @@ public class EventHandler {
                     .apply(SetItemCountFunction.setCount(morphineMax))
                     .setWeight(morphine)
                     .setQuality(0));
+        builder.add(LootItem.lootTableItem(RegistryObjects.TOURNIQUET::get)
+                    .apply(SetItemCountFunction.setCount(ConstantValue.exactly(1.0F)))
+                    .setWeight(Math.max(1, bandage / 3))
+                    .setQuality(0));
+        builder.add(LootItem.lootTableItem(RegistryObjects.SPLINT::get)
+                    .apply(SetItemCountFunction.setCount(ConstantValue.exactly(1.0F)))
+                    .setWeight(Math.max(1, plaster / 4))
+                    .setQuality(0));
         event.getTable().addPool(builder.build());
     }
 
@@ -386,6 +395,8 @@ public class EventHandler {
         } else {
             amount = amount * (float) (double) FirstAidConfig.SERVER.otherRegenMultiplier.get();
         }
+        // Healing from other mods is expressed in vanilla health units, limb hit points are not.
+        amount = HealthUnits.toEngine(amount, (Player) entity, CommonUtils.getDamageModel((Player) entity));
         if (FirstAidConfig.GENERAL.debug.get()) {
             CommonUtils.debugLogStacktrace("External healing: : " + amount);
         }
@@ -582,6 +593,7 @@ public class EventHandler {
             damageModel.forEach(damageablePart -> damageablePart.heal(damageablePart.getMaxHealth(), player, false));
             if (damageModel instanceof PlayerDamageModel playerDamageModel) {
                 playerDamageModel.clearStatusEffects();
+                playerDamageModel.clearInjuries();
                 playerDamageModel.beginAudioMute(80);
             }
             damageModel.scheduleResync();

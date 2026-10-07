@@ -21,6 +21,7 @@ package ichttt.mods.firstaid.client.gui;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
+import ichttt.mods.firstaid.common.damagesystem.PlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.client.util.HealthRenderUtils;
 import ichttt.mods.firstaid.common.util.CommonUtils;
@@ -97,6 +98,7 @@ public final class FirstaidIngameGui {
         for (EnumPlayerPart part : DISPLAY_ORDER) {
             AbstractDamageablePart damageablePart = damageModel.getFromEnum(part);
             guiGraphics.drawString(minecraft.font, LABELS.get(part), left, y + 1, 0xFFFFFF, false);
+            HealthRenderUtils.drawInjuryMarkers(guiGraphics, minecraft.font, damageablePart, left - 3, y + 1);
             float ratio = CommonUtils.getVisibleHealthRatio(damageablePart);
             drawBar(guiGraphics, barX, y, ratio, HealthRenderUtils.getHealthColor(damageablePart));
             HealthRenderUtils.drawHealthString(guiGraphics, minecraft.font, damageablePart, barX + BAR_WIDTH + 4, y + 1, false);
@@ -130,73 +132,11 @@ public final class FirstaidIngameGui {
     }
 
     private static float getModelDisplayHealth(Player player, AbstractPlayerDamageModel damageModel) {
-        if (damageModel == null) {
+        if (!(damageModel instanceof PlayerDamageModel model)) {
             return player.getHealth();
         }
 
-        float currentHealth = 0.0F;
-        FirstAidConfig.Server.VanillaHealthCalculationMode mode = FirstAidConfig.SERVER.vanillaHealthCalculation.get();
-        if (damageModel.hasNoCritical()) {
-            mode = FirstAidConfig.Server.VanillaHealthCalculationMode.AVERAGE_ALL;
-        }
-
-        float ratio = switch (mode) {
-            case AVERAGE_CRITICAL -> {
-                int maxHealth = 0;
-
-                for (AbstractDamageablePart part : damageModel) {
-                    if (part.canCauseDeath) {
-                        currentHealth += part.currentHealth;
-                        maxHealth += part.getMaxHealth();
-                    }
-                }
-
-                yield maxHealth <= 0 ? 0.0F : currentHealth / maxHealth;
-            }
-            case MIN_CRITICAL -> {
-                AbstractDamageablePart minimal = null;
-                float lowest = Float.MAX_VALUE;
-
-                for (AbstractDamageablePart part : damageModel) {
-                    if (part.canCauseDeath && part.currentHealth < lowest) {
-                        minimal = part;
-                        lowest = part.currentHealth;
-                    }
-                }
-
-                yield minimal == null || minimal.getMaxHealth() <= 0 ? 0.0F : minimal.currentHealth / minimal.getMaxHealth();
-            }
-            case AVERAGE_ALL -> {
-                for (AbstractDamageablePart part : damageModel) {
-                    currentHealth += part.currentHealth;
-                }
-
-                int maxHealth = damageModel.getCurrentMaxHealth();
-                yield maxHealth <= 0 ? 0.0F : currentHealth / maxHealth;
-            }
-            case CRITICAL_50_PERCENT_OTHER_50_PERCENT -> {
-                float currentNormal = 0.0F;
-                int maxNormal = 0;
-                float currentCritical = 0.0F;
-                int maxCritical = 0;
-
-                for (AbstractDamageablePart part : damageModel) {
-                    if (part.canCauseDeath) {
-                        currentCritical += part.currentHealth;
-                        maxCritical += part.getMaxHealth();
-                    } else {
-                        currentNormal += part.currentHealth;
-                        maxNormal += part.getMaxHealth();
-                    }
-                }
-
-                float avgNormal = maxNormal <= 0 ? 0.0F : currentNormal / maxNormal;
-                float avgCritical = maxCritical <= 0 ? 0.0F : currentCritical / maxCritical;
-                yield (avgCritical + avgNormal) / 2.0F;
-            }
-        };
-
-        float displayHealth = ratio * player.getMaxHealth();
+        float displayHealth = model.projectVanillaHealth(player);
         return displayHealth <= 0.0F && player.isAlive() && !damageModel.isDead(player) ? 1.0F : displayHealth;
     }
 

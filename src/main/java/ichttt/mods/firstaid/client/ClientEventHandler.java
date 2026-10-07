@@ -261,7 +261,8 @@ public class ClientEventHandler {
             return;
         }
 
-        if (FirstAidConfig.SERVER.vanillaHealthCalculation.get() == FirstAidConfig.Server.VanillaHealthCalculationMode.AVERAGE_ALL) {
+        if (FirstAidConfig.SERVER.vanillaHealthCalculation.get() == FirstAidConfig.Server.VanillaHealthCalculationMode.AVERAGE_ALL
+                || FirstAidConfig.SERVER.vanillaHealthCalculation.get() == FirstAidConfig.Server.VanillaHealthCalculationMode.TOTAL_POOL) {
             FirstaidIngameGui.renderHealth(gui, mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(), event.getGuiGraphics());
         }
     }
@@ -269,7 +270,8 @@ public class ClientEventHandler {
     @SubscribeEvent
     public static void tooltipItems(ItemTooltipEvent event) {
         ItemStack stack = event.getItemStack();
-        if (stack.getItem() instanceof ItemHealing itemHealing && event.getEntity() != null) {
+        if (stack.getItem() instanceof ItemHealing itemHealing && event.getEntity() != null
+                && !(itemHealing instanceof ichttt.mods.firstaid.common.items.ItemTreatment treatment && treatment.hasCustomTooltip())) {
             AbstractPartHealer healer = itemHealing.createNewHealer(stack);
             if (healer != null) {
                 event.getToolTip().add(Component.translatable("firstaid.tooltip.healer",
@@ -370,7 +372,7 @@ public class ClientEventHandler {
         }
 
         var damageablePart = damageModel.getFromEnum(part);
-        if (damageablePart.activeHealer != null || CommonUtils.isPartVisuallyFull(damageablePart)) {
+        if (damageablePart.activeHealer != null || !itemHealing.canTreat(damageablePart)) {
             return false;
         }
 
@@ -409,13 +411,13 @@ public class ClientEventHandler {
         }
 
         ItemStack stack = mc.player.getItemInHand(hand);
-        if (!(stack.getItem() instanceof ItemHealing)) {
+        if (!(stack.getItem() instanceof ItemHealing itemHealing)) {
             return false;
         }
 
         for (EnumPlayerPart part : EnumPlayerPart.VALUES) {
             var damageablePart = damageModel.getFromEnum(part);
-            if (damageablePart.activeHealer == null && !CommonUtils.isPartVisuallyFull(damageablePart)) {
+            if (damageablePart.activeHealer == null && itemHealing.canTreat(damageablePart)) {
                 return true;
             }
         }
@@ -935,14 +937,14 @@ public class ClientEventHandler {
         }
 
         ItemStack currentStack = mc.player.getItemInHand(pendingHealingSelection.hand());
-        if (!(currentStack.getItem() instanceof ItemHealing)
+        if (!(currentStack.getItem() instanceof ItemHealing pendingItem)
                 || !ItemStack.isSameItemSameComponents(currentStack, pendingHealingSelection.selectedStack())) {
             clearPendingHealingSelectionWithFeedback(mc);
             return;
         }
 
         var damageablePart = damageModel.getFromEnum(pendingHealingSelection.part());
-        if (damageablePart.activeHealer != null || CommonUtils.isPartVisuallyFull(damageablePart)) {
+        if (damageablePart.activeHealer != null || !pendingItem.canTreat(damageablePart)) {
             clearPendingHealingSelection(mc.player);
             return;
         }

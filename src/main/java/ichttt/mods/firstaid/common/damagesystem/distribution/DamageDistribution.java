@@ -27,6 +27,8 @@ import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.api.event.FirstAidLivingDamageEvent;
 import ichttt.mods.firstaid.common.RegistryObjects;
 import ichttt.mods.firstaid.common.damagesystem.PlayerDamageModel;
+import ichttt.mods.firstaid.common.health.HealthUnits;
+import ichttt.mods.firstaid.common.health.InjuryEngine;
 import ichttt.mods.firstaid.common.init.FirstAidDataAttachments;
 import ichttt.mods.firstaid.common.util.ArmorUtils;
 import ichttt.mods.firstaid.common.util.CommonUtils;
@@ -82,6 +84,7 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
             return 0F;
         }
 
+        InjuryEngine.onDamaged(player, damageModel, before, source);
         if (damageModel instanceof PlayerDamageModel playerDamageModel) {
             playerDamageModel.registerDamageFeedback(player, source, before);
             playerDamageModel.handlePostDamage(player, source);
@@ -139,19 +142,29 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
             damageableParts.add(damageModel.getFromEnum(part));
         }
         Collections.shuffle(damageableParts);
+        // The damage that arrives here is in vanilla units (it already went through armor math tuned for them);
+        // limb hit points are engine units, so the conversion happens right where hit points are removed.
+        float unit = HealthUnits.engineHpPerVanillaHp(player, damageModel);
+        float overkillFactor = FirstAidConfig.SERVER.limbOverkillFactor.get().floatValue();
         for (AbstractDamageablePart part : damageableParts) {
             float minHealth = minHealth(player, part);
             float damageMultiplier = getIncomingPartDamageMultiplier(damageModel, part);
-            float scaledDamage = damage * damageMultiplier;
+            float scaledDamage = damage * damageMultiplier * unit;
             float scaledLeft = part.damage(scaledDamage, player, !player.hasEffect(RegistryObjects.PAINKILLER_EFFECT), minHealth);
             float scaledDamageDone = scaledDamage - scaledLeft;
-            float dmgConsumed = Math.min(damage, restoreOriginalDamageScale(scaledDamageDone, damageMultiplier));
+            float dmgConsumed = Math.min(damage, restoreOriginalDamageScale(scaledDamageDone, damageMultiplier * unit));
             CommonUtils.syncDamageModel((ServerPlayer) player);
             if (addStat)
-                player.awardStat(Stats.DAMAGE_TAKEN, Math.round(scaledDamageDone * 10.0F));
+                player.awardStat(Stats.DAMAGE_TAKEN, Math.round(scaledDamageDone / unit * 10.0F));
             damage = Math.max(0.0F, damage - dmgConsumed);
             if (damage == 0)
                 break;
+            // A limb that is gone swallows part of the excess instead of passing all of it on (head/body keep their rules)
+            if (!part.canCauseDeath && part.currentHealth <= minHealth + 0.001F) {
+                damage *= overkillFactor;
+                if (damage <= 0.0F)
+                    break;
+            }
         }
         return damage;
     }

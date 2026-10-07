@@ -26,6 +26,7 @@ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.common.damagesystem.distribution.DamageDistribution;
+import ichttt.mods.firstaid.common.health.HealthUnits;
 import ichttt.mods.firstaid.common.damagesystem.distribution.DirectDamageDistributionAlgorithm;
 import ichttt.mods.firstaid.common.init.FirstAidDataAttachments;
 import ichttt.mods.firstaid.common.util.CommonUtils;
@@ -80,7 +81,9 @@ public class DebugDamageCommand {
 
     private static void doDamage(EnumPlayerPart part, float damage, boolean debuff, ServerPlayer player, AbstractPlayerDamageModel damageModel) {
         if (damage > 0F) {
-            DamageDistribution.handleDamageTaken(new DirectDamageDistributionAlgorithm(part, debuff), damageModel, damage, player, player.damageSources().fellOutOfWorld(), false, false);
+            // The command speaks limb hit points; the distribution expects vanilla units, so convert back.
+            float vanillaDamage = HealthUnits.toVanilla(damage, player, damageModel);
+            DamageDistribution.handleDamageTaken(new DirectDamageDistributionAlgorithm(part, debuff), damageModel, vanillaDamage, player, player.damageSources().fellOutOfWorld(), false, false);
         } else {
             damageModel.getFromEnum(part).heal(-damage, player, debuff);
         }

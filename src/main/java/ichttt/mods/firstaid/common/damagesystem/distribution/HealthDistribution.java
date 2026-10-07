@@ -88,6 +88,7 @@ public class HealthDistribution {
         if (sendChanges) {
             if (damageModel instanceof PlayerDamageModel playerDamageModel) {
                 playerDamageModel.refreshPainState(player);
+                playerDamageModel.syncVanillaHealth(player);
             }
             CommonUtils.syncDamageModel((ServerPlayer) player);
         }
@@ -138,6 +139,7 @@ public class HealthDistribution {
         if (sendChanges) {
             if (damageModel instanceof PlayerDamageModel playerDamageModel) {
                 playerDamageModel.refreshPainState(player);
+                playerDamageModel.syncVanillaHealth(player);
             }
             CommonUtils.syncDamageModel((ServerPlayer) player);
         }

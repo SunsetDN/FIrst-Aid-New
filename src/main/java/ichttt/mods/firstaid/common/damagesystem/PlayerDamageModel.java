@@ -46,6 +46,9 @@ import ichttt.mods.firstaid.common.RegistryObjects;
 import ichttt.mods.firstaid.common.compat.playerrevive.PRCompatManager;
 import ichttt.mods.firstaid.common.damagesystem.DamageablePart;
 import ichttt.mods.firstaid.common.damagesystem.debuff.SharedDebuff;
+import ichttt.mods.firstaid.common.health.HealthUnits;
+import ichttt.mods.firstaid.common.health.InjuryEngine;
+import ichttt.mods.firstaid.common.health.VanillaHealthBridge;
 import ichttt.mods.firstaid.common.potion.MilkImmuneMobEffectInstance;
 import ichttt.mods.firstaid.common.registries.FirstAidRegistryLookups;
 import ichttt.mods.firstaid.common.registries.LookupReloadListener;
@@ -101,6 +104,7 @@ implements LookupReloadListener {
     private static final float ACUTE_FAST_DECAY_MULTIPLIER = 1.65f;
     private static final float CHRONIC_POWER = 1.55f;
     private static final float CHRONIC_SCALE = 0.92f;
+    private static final float FRACTURE_CHRONIC_PAIN = 0.12f;
     /** Fraction of acute pain that still shows under opioids. */
     public static final float ACUTE_BREAKTHROUGH = 0.25f;
     private static final float ACUTE_HITCH_THRESHOLD = 0.70f;
@@ -185,6 +189,8 @@ implements LookupReloadListener {
     public static final int PULSE_ULTRA_INCREASE = 2;
     public static final int PULSE_DECREASE = 3;
     private final Set<SharedDebuff> sharedDebuffs = new HashSet<SharedDebuff>();
+    /** Server-side cache of the last applied fracture attribute state, see {@link InjuryEngine}. Never serialized. */
+    public int fractureEffectSignature = -1;
     private int morphineTicksLeft = 0;
     /** Peak morphine duration for this dose; used for remaining-ratio visual fade. */
     private int morphineMaxTicks = 0;
@@ -446,6 +452,7 @@ implements LookupReloadListener {
         if (!world.isClientSide()) {
             this.tickPendingMedicineActivations(player);
             this.updateMedicalState(player);
+            InjuryEngine.tick(player, this);
         }
         // Pose/attributes must run on client too �?forced pose is not automatically synced.
         if (this.unconsciousTicks > 0) {
@@ -505,7 +512,10 @@ implements LookupReloadListener {
     }
 
     private void syncVanillaHealth(Player player, float newCurrentHealth) {
-        if (newCurrentHealth != this.prevHealthCurrent) {
+        // Compare with what vanilla actually holds, not only with the last projection: the stored value is a cache of
+        // the limb model and must converge even if something managed to write around the setHealth hook.
+        boolean serverSide = !player.level().isClientSide();
+        if (newCurrentHealth != this.prevHealthCurrent || (serverSide && Math.abs(player.getHealth() - newCurrentHealth) > 1.0E-3F)) {
             float syncedHealth = newCurrentHealth;
             CommonUtils.runWithoutSetHealthInterception(() -> player.setHealth(syncedHealth));
         }
@@ -759,7 +769,7 @@ implements LookupReloadListener {
         if (delayTicks <= 0) {
             this.clearUnconsciousState();
             this.clearUnconsciousPenalties(player);
-            CommonUtils.runWithoutSetHealthInterception(() -> player.setHealth(Math.max(player.getHealth(), 1.0f)));
+            VanillaHealthBridge.ensureAlive(player);
         } else {
             this.unconsciousTicks = delayTicks;
             this.unconsciousAllowsGiveUp = false;
@@ -972,6 +982,15 @@ implements LookupReloadListener {
         this.audioMuteTicks = 0;
     }
 
+    /** Removes every bleed and fracture, e.g. after respawning or an admin full heal. */
+    public void clearInjuries() {
+        for (AbstractDamageablePart part : this) {
+            part.bleedLevel = AbstractDamageablePart.BLEED_NONE;
+            part.fractured = false;
+        }
+        this.fractureEffectSignature = -1;
+    }
+
     public void markExternalRevivePending(Player player) {
         this.externalRevivePending = true;
         this.criticalConditionActive = false;
@@ -1003,7 +1022,7 @@ implements LookupReloadListener {
         this.setUnconsciousState(3000, true, true, UNCONSCIOUS_REASON_CRITICAL);
         this.acutePainIntensity = Math.min(PAIN_HARD_CAP, Math.max(this.acutePainIntensity, 1.25f));
         this.painLevel = Math.max(this.painLevel, 5);
-        CommonUtils.runWithoutSetHealthInterception(() -> player.setHealth(Math.max(player.getHealth(), 1.0f)));
+        VanillaHealthBridge.ensureAlive(player);
         this.scheduleResync();
     }
 
@@ -1052,7 +1071,7 @@ implements LookupReloadListener {
         } else {
             this.clearUnconsciousState();
             this.clearUnconsciousPenalties(player);
-            CommonUtils.runWithoutSetHealthInterception(() -> player.setHealth(Math.max(player.getHealth(), 1.0f)));
+            VanillaHealthBridge.ensureAlive(player);
         }
         this.scheduleResync();
         if (player instanceof ServerPlayer) {
@@ -1113,7 +1132,7 @@ implements LookupReloadListener {
         if (player.level().isClientSide() || before == null || this.audioMuteTicks > 0) {
             return;
         }
-        float headLost = Math.max(0.0f, before.HEAD.currentHealth - this.HEAD.currentHealth);
+        float headLost = HealthUnits.toReferenceScale(Math.max(0.0f, before.HEAD.currentHealth - this.HEAD.currentHealth), this);
         float totalLost = 0.0f;
         for (AbstractDamageablePart part : this) {
             AbstractDamageablePart previous = before.getFromEnum(part.part);
@@ -1121,6 +1140,7 @@ implements LookupReloadListener {
                 totalLost += Math.max(0.0f, previous.currentHealth - part.currentHealth);
             }
         }
+        totalLost = HealthUnits.toReferenceScale(totalLost, this);
         if (totalLost <= 0.05f) {
             return;
         }
@@ -1191,7 +1211,7 @@ implements LookupReloadListener {
         }
         float delta = missing - this.lastTrackedMissingHealth;
         this.lastTrackedMissingHealth = missing;
-        if (delta > 0.04f) {
+        if (HealthUnits.toReferenceScale(delta, this) > 0.04f) {
             this.registerAcutePainFromInjury(player, delta);
         }
     }
@@ -1201,7 +1221,8 @@ implements LookupReloadListener {
             return;
         }
         float previousAcute = this.acutePainIntensity;
-        float gain = Math.min(ACUTE_GAIN_MAX_PER_HIT, deltaMissingHealth * ACUTE_GAIN_PER_MISSING_HP);
+        // The pain constants were tuned for a 20 hit point player; limb hit points are normalised back to that scale.
+        float gain = Math.min(ACUTE_GAIN_MAX_PER_HIT, HealthUnits.toReferenceScale(deltaMissingHealth, this) * ACUTE_GAIN_PER_MISSING_HP);
         this.acutePainIntensity = Math.min(PAIN_HARD_CAP, this.acutePainIntensity + gain);
         if (player != null && !player.level().isClientSide()) {
             this.tryApplyAcuteHitch(player, previousAcute);
@@ -1272,6 +1293,15 @@ implements LookupReloadListener {
         };
     }
 
+    /**
+     * The value vanilla {@code getHealth()} is derived from this model: the single place that defines the projection,
+     * used by the server to write it and by the client HUD to display it.
+     */
+    public float projectVanillaHealth(Player player) {
+        float projected = this.calculateNewCurrentHealth(player);
+        return Float.isNaN(projected) ? 0.0f : projected;
+    }
+
     private float calculateNewCurrentHealth(Player player) {
         float currentHealth = 0.0f;
         FirstAidConfig.Server.VanillaHealthCalculationMode mode = (FirstAidConfig.Server.VanillaHealthCalculationMode)((Object)FirstAidConfig.SERVER.vanillaHealthCalculation.get());
@@ -1279,6 +1309,15 @@ implements LookupReloadListener {
             mode = FirstAidConfig.Server.VanillaHealthCalculationMode.AVERAGE_ALL;
         }
         switch (mode) {
+            case TOTAL_POOL:
+            case AVERAGE_ALL: {
+                float limbTotal = 0.0f;
+                for (AbstractDamageablePart part : this) {
+                    limbTotal += part.currentHealth;
+                }
+                currentHealth = limbTotal / (float)this.getCurrentMaxHealth();
+                break;
+            }
             case AVERAGE_CRITICAL: {
                 int maxHealth = 0;
                 for (AbstractDamageablePart part : this) {
@@ -1300,13 +1339,6 @@ implements LookupReloadListener {
                 }
                 Objects.requireNonNull(minimal);
                 currentHealth = minimal.currentHealth / (float)minimal.getMaxHealth();
-                break;
-            }
-            case AVERAGE_ALL: {
-                for (AbstractDamageablePart part : this) {
-                    currentHealth += part.currentHealth;
-                }
-                currentHealth /= (float)this.getCurrentMaxHealth();
                 break;
             }
             case CRITICAL_50_PERCENT_OTHER_50_PERCENT: {
@@ -1336,7 +1368,8 @@ implements LookupReloadListener {
         if (this.isCriticalDowned() && this.hasCriticalPartCollapsed() && !this.hasAllCriticalPartsCollapsed()) {
             return Math.max(1.0f, scaledHealth);
         }
-        return scaledHealth;
+        // Vanilla and other mods read health <= 0 as "dead": only an empty body may project to zero.
+        return VanillaHealthBridge.applyAliveFloor(scaledHealth, !this.hasNoRemainingBodyHealth());
     }
 
     @Override
@@ -1649,7 +1682,7 @@ implements LookupReloadListener {
             return false;
         }
         this.externalRevivePending = false;
-        if (player.isAlive() && player.getHealth() > 0.0f) {
+        if (player.isAlive()) {
             this.revivePlayer(player);
         } else {
             this.clearStatusEffects();
@@ -1682,6 +1715,12 @@ implements LookupReloadListener {
     }
 
     private float calculateChronicIntensity() {
+        float fracturePain = 0.0f;
+        for (AbstractDamageablePart part : this) {
+            if (part.fractured) {
+                fracturePain += FRACTURE_CHRONIC_PAIN;
+            }
+        }
         boolean hasInjury = false;
         float maxSeverity = 0.0f;
         float weightedSeverity = 0.0f;
@@ -1704,12 +1743,12 @@ implements LookupReloadListener {
             totalWeight += weight;
         }
         if (!hasInjury) {
-            return 0.0f;
+            return Mth.clamp(fracturePain, 0.0f, CHRONIC_SOFT_CAP);
         }
         float averageSeverity = totalWeight <= 0.0f ? 0.0f : weightedSeverity / totalWeight;
         // Soften low-end injury; keep multi-part critical near soft cap.
         float combinedSeverity = Math.min(1.0f, maxSeverity * 0.55f + averageSeverity * 0.45f);
-        return Mth.clamp((float) Math.pow(combinedSeverity, CHRONIC_POWER) * CHRONIC_SCALE, 0.0f, CHRONIC_SOFT_CAP);
+        return Mth.clamp((float) Math.pow(combinedSeverity, CHRONIC_POWER) * CHRONIC_SCALE + fracturePain, 0.0f, CHRONIC_SOFT_CAP);
     }
 
     private int mapEffectiveToPainLevel(float effective, int fullyLostParts) {

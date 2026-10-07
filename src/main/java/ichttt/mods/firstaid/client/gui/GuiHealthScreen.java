@@ -126,10 +126,10 @@ public class GuiHealthScreen extends Screen {
             return false;
         }
         ItemStack stack = minecraft.player.getItemInHand(activeHand);
-        if (!(stack.getItem() instanceof ItemHealing)) {
+        if (!(stack.getItem() instanceof ItemHealing itemHealing)) {
             return false;
         }
-        return part.activeHealer == null && !CommonUtils.isPartVisuallyFull(part);
+        return part.activeHealer == null && itemHealing.canTreat(part);
     }
 
     private void applyHealing(EnumPlayerPart part) {
@@ -192,6 +192,7 @@ public class GuiHealthScreen extends Screen {
     private void drawHealth(GuiGraphics guiGraphics, AbstractDamageablePart damageablePart, boolean right, int yOffset) {
         int xTranslation = guiLeft + (right ? getRightOffset(damageablePart) : 57);
         drawPartHealthIndicator(guiGraphics, xTranslation, guiTop + yOffset, damageablePart);
+        HealthRenderUtils.drawInjuryMarkers(guiGraphics, font, damageablePart, xTranslation + 40, guiTop + yOffset - 9);
         HealthRenderUtils.drawHealth(guiGraphics, font, damageablePart, xTranslation, guiTop + yOffset, true);
     }
 

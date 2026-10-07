@@ -220,7 +220,17 @@ public class FirstAidConfig {
     public static class Server {
 
         public enum VanillaHealthCalculationMode {
-            AVERAGE_ALL, AVERAGE_CRITICAL, MIN_CRITICAL, CRITICAL_50_PERCENT_OTHER_50_PERCENT
+            TOTAL_POOL, AVERAGE_ALL, AVERAGE_CRITICAL, MIN_CRITICAL, CRITICAL_50_PERCENT_OTHER_50_PERCENT
+        }
+
+        /**
+         * How amounts that arrive in vanilla health units (hurt(), heal(), setHealth()) map onto the per-limb pool.
+         */
+        public enum DamageScaleMode {
+            /** Vanilla amounts are scaled so that X% of vanilla max health equals X% of the whole limb pool. */
+            AUTO,
+            /** Vanilla amounts are applied 1:1 as limb hit points (legacy behaviour, use with small limb values). */
+            RAW
         }
 
         public enum ArmorEnchantmentMode {
@@ -230,14 +240,16 @@ public class FirstAidConfig {
         Server(ModConfigSpec.Builder builder) {
             builder.comment("Server to Client synced configuration settings").push("Damage System");
 
-            maxHealthHead = healthEntry(builder, "Head", 4);
-            maxHealthLeftArm = healthEntry(builder, "Left Arm", 4);
-            maxHealthLeftLeg = healthEntry(builder, "Left Leg", 4);
-            maxHealthLeftFoot = healthEntry(builder, "Left Foot", 4);
-            maxHealthBody = healthEntry(builder, "Body", 6);
-            maxHealthRightArm = healthEntry(builder, "Right Arm", 4);
-            maxHealthRightLeg = healthEntry(builder, "Right Leg", 4);
-            maxHealthRightFoot = healthEntry(builder, "Right Foot", 4);
+            // Absolute limb hit points. Defaults follow an EFT-like layout (head 35, thorax 85, arms 60, legs 65);
+            // the feet are an extension of this mod's 8-part body and sit on top of the leg value.
+            maxHealthHead = healthEntry(builder, "Head", 35);
+            maxHealthLeftArm = healthEntry(builder, "Left Arm", 60);
+            maxHealthLeftLeg = healthEntry(builder, "Left Leg", 65);
+            maxHealthLeftFoot = healthEntry(builder, "Left Foot", 25);
+            maxHealthBody = healthEntry(builder, "Body", 85);
+            maxHealthRightArm = healthEntry(builder, "Right Arm", 60);
+            maxHealthRightLeg = healthEntry(builder, "Right Leg", 65);
+            maxHealthRightFoot = healthEntry(builder, "Right Foot", 25);
             causeDeathHead = builder
                     .comment("True if the head can cause death if health drops to 0")
                     .translation("firstaid.config.causedeath.head")
@@ -275,6 +287,11 @@ public class FirstAidConfig {
 
             bandage = new IEEntry(builder, "bandage", 4, 18, 3000);
             plaster = new IEEntry(builder, "plaster", 2, 22, 3000);
+            // totalHeals is the number of heal pulses, secondsPerHeal the time of one pulse; items that only treat an
+            // injury (tourniquet, splint) use a single pulse as the time until the treatment takes effect.
+            tourniquet = new IEEntry(builder, "tourniquet", 1, 2, 4000);
+            splint = new IEEntry(builder, "splint", 1, 3, 6000);
+            traumaKit = new IEEntry(builder, "trauma_kit", 8, 1, 6000);
 
             builder.pop().push("External Healing");
 
@@ -323,15 +340,28 @@ public class FirstAidConfig {
             capMaxHealth = builder
                     .comment("If true, max health will be capped at 6 hearts and absorption at 2 hearts per limb. If false, the health cap will be much higher (64 hearts normal and 16 absorption)")
                     .translation("firstaid.config.scalemaxhealth")
-                    .define("capMaxHealth", true);
+                    .define("capMaxHealth", false);
 
             vanillaHealthCalculation = builder
-                    .comment("Specifies how the vanilla health is calculated. Affects the vanilla visual health bar, as well as the value other mods get to see when they query the player health.",
-                            "AVERAGE_ALL simply takes all limbs and calculates the average of it.",
+                    .comment("The per-limb hit points are the real health of a player. Vanilla getHealth() is only a derived compatibility value for other mods and the vanilla bar.",
+                            "This setting specifies how that derived value is calculated.",
+                            "TOTAL_POOL (default) maps the sum of all limb hit points onto vanilla max health.",
+                            "AVERAGE_ALL is the same as TOTAL_POOL but kept for older configs.",
                             "AVERAGE_CRITICAL takes all critical limbs and calculates the average of it.",
                             "MIN_CRITICAl takes the smallest health value of all critical limb.",
                             "Does not have any effect if all critical limbs have been disabled.")
-                    .defineEnum("vanillaHealthCalculation", VanillaHealthCalculationMode.AVERAGE_ALL);
+                    .defineEnum("vanillaHealthCalculation", VanillaHealthCalculationMode.TOTAL_POOL);
+
+            damageScaleMode = builder
+                    .comment("How amounts in vanilla health units (damage from hurt(), healing from heal()/setHealth(), item heal pulses) map onto limb hit points.",
+                            "AUTO keeps every vanilla-balanced mod usable: damage worth X% of vanilla max health removes X% of the whole limb pool.",
+                            "RAW applies vanilla amounts 1:1 as limb hit points. Use it only together with small limb values or damage values tuned for the limb values.")
+                    .defineEnum("damageScaleMode", DamageScaleMode.AUTO);
+
+            limbOverkillFactor = builder
+                    .comment("Fraction of the damage that is passed on when a hit empties a non-critical limb (head and body keep passing everything on).",
+                            "1 passes all the excess damage on, 0 swallows it completely.")
+                    .defineInRange("limbOverkillFactor", 0.5D, 0D, 1D);
 
             useFriendlyRandomDistribution = builder
                     .comment("If enabled, random damage distributions can leave critical limbs at 1hp if possible.",
@@ -346,6 +376,34 @@ public class FirstAidConfig {
                             "If set to GLOBAL_ENCHANTMENTS, the enchantments of all armor pieces are taken into account for all body parts that have any kind of armor.")
                     .defineEnum("armorEnchantmentMode", ArmorEnchantmentMode.LOCAL_ENCHANTMENTS);
 
+            builder.pop();
+
+            builder.comment("EFT-style injuries: bleeding and fractures on top of plain limb hit points").push("Injuries");
+            bleedingEnabled = builder
+                    .comment("If true, damaging hits can open light or heavy bleeds on the limb they hit")
+                    .define("bleedingEnabled", true);
+            bleedChanceBase = builder
+                    .comment("Base chance that a bleed-causing hit (projectiles, melee, explosions, sharp environmental damage) opens a bleed")
+                    .defineInRange("bleedChanceBase", 0.15D, 0D, 1D);
+            bleedChancePerHitFraction = builder
+                    .comment("Additional bleed chance per 100% of the limb's max hit points removed by a single hit (scaled linearly)")
+                    .defineInRange("bleedChancePerHitFraction", 0.9D, 0D, 4D);
+            heavyBleedHitFraction = builder
+                    .comment("A bleed opened by a hit that removed at least this fraction of the limb's max hit points is a heavy bleed, otherwise it is a light bleed")
+                    .defineInRange("heavyBleedHitFraction", 0.25D, 0D, 1D);
+            lightBleedPercentPerSecond = builder
+                    .comment("Light bleed: percent of the limb's max hit points drained per second")
+                    .defineInRange("lightBleedPercentPerSecond", 0.8D, 0D, 100D);
+            heavyBleedPercentPerSecond = builder
+                    .comment("Heavy bleed: percent of the limb's max hit points drained per second")
+                    .defineInRange("heavyBleedPercentPerSecond", 2.5D, 0D, 100D);
+            fracturesEnabled = builder
+                    .comment("If true, hard landings and heavy limb hits can fracture arms, legs and feet")
+                    .define("fracturesEnabled", true);
+            fractureSpeedPenalty = builder
+                    .comment("Movement speed removed per fractured leg/foot while the player is not on painkillers (0.35 = 35%)",
+                            "Painkillers and morphine reduce this penalty to 40%")
+                    .defineInRange("fractureSpeedPenalty", 0.35D, 0D, 0.9D);
             builder.pop();
 
             builder.push("Command Settings");
@@ -506,6 +564,9 @@ public class FirstAidConfig {
 
         public final IEEntry bandage;
         public final IEEntry plaster;
+        public final IEEntry tourniquet;
+        public final IEEntry splint;
+        public final IEEntry traumaKit;
 
         public final ModConfigSpec.BooleanValue allowNaturalRegeneration;
         public final ModConfigSpec.BooleanValue allowOtherHealingItems;
@@ -519,6 +580,16 @@ public class FirstAidConfig {
         public final ModConfigSpec.BooleanValue scaleMaxHealth;
         public final ModConfigSpec.BooleanValue capMaxHealth;
         public final ModConfigSpec.EnumValue<VanillaHealthCalculationMode> vanillaHealthCalculation;
+        public final ModConfigSpec.EnumValue<DamageScaleMode> damageScaleMode;
+        public final ModConfigSpec.DoubleValue limbOverkillFactor;
+        public final ModConfigSpec.BooleanValue bleedingEnabled;
+        public final ModConfigSpec.DoubleValue bleedChanceBase;
+        public final ModConfigSpec.DoubleValue bleedChancePerHitFraction;
+        public final ModConfigSpec.DoubleValue heavyBleedHitFraction;
+        public final ModConfigSpec.DoubleValue lightBleedPercentPerSecond;
+        public final ModConfigSpec.DoubleValue heavyBleedPercentPerSecond;
+        public final ModConfigSpec.BooleanValue fracturesEnabled;
+        public final ModConfigSpec.DoubleValue fractureSpeedPenalty;
         public final ModConfigSpec.BooleanValue useFriendlyRandomDistribution;
         public final ModConfigSpec.DoubleValue friendlyRandomDistributionChance;
         public final ModConfigSpec.EnumValue<ArmorEnchantmentMode> armorEnchantmentMode;
@@ -715,8 +786,10 @@ public class FirstAidConfig {
         }
     }
 
-//    @Config.Comment("If true, all usages of setHealth from other mods will be captured. Should not cause any problems, but allow mods like scaling health bandages to apply")
-//    @Config.LangKey("firstaid.config.sethealth")
-//    @ExtraConfig.Advanced
-    public static final boolean watchSetHealth = true; //If we need this at all, this is server as well
+    /**
+     * Writes to the vanilla health value (setHealth / heal / hurt from other mods) are translated into limb damage and
+     * healing by {@link ichttt.mods.firstaid.common.health.VanillaHealthBridge}. This is always on: the limb model is
+     * the source of truth, so an unhandled write would simply be overwritten on the next tick.
+     */
+    public static final boolean watchSetHealth = true;
 }

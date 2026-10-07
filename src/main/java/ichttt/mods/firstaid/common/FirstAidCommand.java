@@ -26,7 +26,10 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import ichttt.mods.firstaid.FirstAid;
 import ichttt.mods.firstaid.FirstAidConfig;
+import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
+import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
+import ichttt.mods.firstaid.common.health.InjuryEngine;
 import ichttt.mods.firstaid.common.damagesystem.PlayerDamageModel;
 import ichttt.mods.firstaid.common.network.MessageSyncCommandSettings;
 import ichttt.mods.firstaid.common.util.CommonUtils;
@@ -145,6 +148,9 @@ public final class FirstAidCommand {
                                 .executes(context -> setCommandTips(context.getSource(), false)))));
         dispatcher.register(Commands.literal("firstaid")
                 .requires(source -> source.hasPermission(2))
+                .then(buildInjuryBranch()));
+        dispatcher.register(Commands.literal("firstaid")
+                .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("addiction")
                         .then(Commands.argument("player", EntityArgument.player())
                                 .requires(source -> source.hasPermission(2))
@@ -157,6 +163,64 @@ public final class FirstAidCommand {
                                                         context.getSource(),
                                                         EntityArgument.getPlayer(context, "player"),
                                                         FloatArgumentType.getFloat(context, "value"))))))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildInjuryBranch() {
+        LiteralArgumentBuilder<CommandSourceStack> bleed = Commands.literal("bleed");
+        LiteralArgumentBuilder<CommandSourceStack> fracture = Commands.literal("fracture");
+        for (EnumPlayerPart part : EnumPlayerPart.VALUES) {
+            bleed.then(Commands.literal(part.getSerializedName())
+                    .then(Commands.literal("none").executes(context -> setBleed(context.getSource(), EntityArgument.getPlayer(context, "player"), part, AbstractDamageablePart.BLEED_NONE)))
+                    .then(Commands.literal("light").executes(context -> setBleed(context.getSource(), EntityArgument.getPlayer(context, "player"), part, AbstractDamageablePart.BLEED_LIGHT)))
+                    .then(Commands.literal("heavy").executes(context -> setBleed(context.getSource(), EntityArgument.getPlayer(context, "player"), part, AbstractDamageablePart.BLEED_HEAVY))));
+            if (InjuryEngine.canFracture(part)) {
+                fracture.then(Commands.literal(part.getSerializedName())
+                        .then(Commands.literal("on").executes(context -> setFracture(context.getSource(), EntityArgument.getPlayer(context, "player"), part, true)))
+                        .then(Commands.literal("off").executes(context -> setFracture(context.getSource(), EntityArgument.getPlayer(context, "player"), part, false))));
+            }
+        }
+        return Commands.literal("injury")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(bleed)
+                        .then(fracture)
+                        .then(Commands.literal("clear")
+                                .executes(context -> clearInjuries(context.getSource(), EntityArgument.getPlayer(context, "player")))));
+    }
+
+    private static int setBleed(CommandSourceStack source, ServerPlayer target, EnumPlayerPart part, byte level) {
+        AbstractPlayerDamageModel damageModel = CommonUtils.getDamageModel(target);
+        if (damageModel == null) {
+            return 0;
+        }
+        damageModel.getFromEnum(part).bleedLevel = level;
+        damageModel.scheduleResync();
+        CommonUtils.syncDamageModel(target);
+        source.sendSuccess(() -> Component.translatable("firstaid.command.injury.bleed", target.getDisplayName(), part.getSerializedName(), level), true);
+        return 1;
+    }
+
+    private static int setFracture(CommandSourceStack source, ServerPlayer target, EnumPlayerPart part, boolean fractured) {
+        AbstractPlayerDamageModel damageModel = CommonUtils.getDamageModel(target);
+        if (damageModel == null) {
+            return 0;
+        }
+        damageModel.getFromEnum(part).fractured = fractured;
+        damageModel.scheduleResync();
+        CommonUtils.syncDamageModel(target);
+        source.sendSuccess(() -> Component.translatable("firstaid.command.injury.fracture", target.getDisplayName(), part.getSerializedName(), fractured), true);
+        return 1;
+    }
+
+    private static int clearInjuries(CommandSourceStack source, ServerPlayer target) {
+        AbstractPlayerDamageModel damageModel = CommonUtils.getDamageModel(target);
+        if (!(damageModel instanceof PlayerDamageModel playerDamageModel)) {
+            return 0;
+        }
+        playerDamageModel.clearInjuries();
+        playerDamageModel.scheduleResync();
+        CommonUtils.syncDamageModel(target);
+        source.sendSuccess(() -> Component.translatable("firstaid.command.injury.clear", target.getDisplayName()), true);
+        return 1;
     }
 
     private static int queryAddiction(CommandSourceStack source, ServerPlayer target) {

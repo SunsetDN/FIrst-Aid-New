@@ -27,6 +27,7 @@ import ichttt.mods.firstaid.api.debuff.IDebuff;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.api.healing.ItemHealing;
 import ichttt.mods.firstaid.api.healing.PartHealingContext;
+import ichttt.mods.firstaid.common.health.HealthUnits;
 import ichttt.mods.firstaid.common.util.CommonUtils;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -75,7 +76,7 @@ public class DamageablePart extends AbstractDamageablePart {
         final float finalNotFitting = notFitting;
         if (applyDebuff && debuffs != null && FirstAid.injuryDebuffMode != FirstAid.InjuryDebuffMode.OFF) {
             Objects.requireNonNull(player, "Got null player with applyDebuff = true");
-            float debuffHealing = amount - finalNotFitting;
+            float debuffHealing = HealthUnits.toDebuffScale(part, maxHealth, amount - finalNotFitting);
             float debuffHealthFraction = currentHealth / maxHealth;
             if (FirstAid.injuryDebuffMode == FirstAid.InjuryDebuffMode.LOW) {
                 debuffHealing *= FirstAid.lowInjuryDebuffDamageScale;
@@ -103,7 +104,7 @@ public class DamageablePart extends AbstractDamageablePart {
         currentHealth = Math.max(minHealth, currentHealth - amount);
         if (applyDebuff && debuffs != null && FirstAid.injuryDebuffMode != FirstAid.InjuryDebuffMode.OFF) {
             Objects.requireNonNull(player, "Got null player with applyDebuff = true");
-            float debuffDamage = amount - notFitting;
+            float debuffDamage = HealthUnits.toDebuffScale(part, maxHealth, amount - notFitting);
             float debuffHealthFraction = currentHealth / maxHealth;
             if (FirstAid.injuryDebuffMode == FirstAid.InjuryDebuffMode.LOW) {
                 debuffDamage *= FirstAid.lowInjuryDebuffDamageScale;
@@ -124,7 +125,7 @@ public class DamageablePart extends AbstractDamageablePart {
             PartHealingContext context = createHealingContext(player, world, healer);
             if (healer.tick()) {
                 float previousHealth = currentHealth;
-                heal(1F, player, !world.isClientSide());
+                heal(HealthUnits.healPulse(player, CommonUtils.getDamageModel(player)), player, !world.isClientSide());
                 if (healingItem != null && context != null && currentHealth > previousHealth) {
                     healingItem.onHealPulse(context);
                 }
@@ -154,6 +155,12 @@ public class DamageablePart extends AbstractDamageablePart {
         if (absorption > 0F) {
             compound.putFloat("absorption", absorption);
         }
+        if (bleedLevel != BLEED_NONE) {
+            compound.putByte("bleed", bleedLevel);
+        }
+        if (fractured) {
+            compound.putBoolean("fractured", true);
+        }
         if (FirstAidConfig.SERVER.scaleMaxHealth.get())
             compound.putInt("maxHealth", maxHealth);
         if (activeHealer != null) {
@@ -173,6 +180,8 @@ public class DamageablePart extends AbstractDamageablePart {
             return;
         activeHealer = null;
         absorption = 0F;
+        bleedLevel = (byte) Math.max(BLEED_NONE, Math.min(BLEED_HEAVY, nbt.getByte("bleed")));
+        fractured = nbt.getBoolean("fractured");
         // Restore max health before current health so scaled limbs are not clamped to the
         // unscaled config cap on world load (see GitHub issue #5).
         if (nbt.contains("maxHealth", Tag.TAG_ANY_NUMERIC)) {

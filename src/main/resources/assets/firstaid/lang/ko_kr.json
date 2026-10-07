@@ -94,5 +94,15 @@
   "firstaid.gui.next_heal": "다음 회복 : %s 초",
   "effect.firstaid.morphine": "모르핀",
   "firstaid.specificarmor": " +%s 부위별 방어 수치",
-  "firstaid.specifictoughness": " +%s 부위별 방어 강도 수치"
+  "firstaid.specifictoughness": " +%s 부위별 방어 강도 수치",
+  "item.firstaid.tourniquet": "지혈대",
+  "item.firstaid.splint": "부목",
+  "item.firstaid.trauma_kit": "외상 키트",
+  "firstaid.tooltip.tourniquet": "팔, 다리, 발의 모든 출혈을 멈춥니다",
+  "firstaid.tooltip.splint": "골절된 팔, 다리, 발을 고정합니다",
+  "firstaid.tooltip.trauma_kit": "선택한 부위를 빠르게 회복시키고 모든 출혈을 멈춥니다",
+  "death.attack.firstaid_bleed_out": "%1$s 과다출혈로 사망했습니다",
+  "firstaid.command.injury.bleed": "%1$s의 %2$s 출혈 단계를 %3$s(으)로 설정했습니다 (0 없음, 1 경미, 2 심각)",
+  "firstaid.command.injury.fracture": "%1$s의 %2$s 골절을 %3$s(으)로 설정했습니다",
+  "firstaid.command.injury.clear": "%s의 모든 출혈과 골절을 치료했습니다"
 }

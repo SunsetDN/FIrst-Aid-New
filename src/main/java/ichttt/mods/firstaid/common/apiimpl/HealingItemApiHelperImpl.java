@@ -18,6 +18,7 @@
 
 package ichttt.mods.firstaid.common.apiimpl;
 
+import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.api.healing.HealingItemApiHelper;
@@ -46,12 +47,17 @@ public class HealingItemApiHelperImpl extends HealingItemApiHelper {
             boolean consumed = ClientHooks.beginApplyHealthUse(hand) || ClientHooks.showGuiApplyHealth(hand);
             return consumed ? InteractionResultHolder.success(player.getItemInHand(hand)) : InteractionResultHolder.fail(player.getItemInHand(hand));
         }
-        return canUseHealingItem(player)
+        return canUseHealingItem(player, itemHealing)
                 ? InteractionResultHolder.success(player.getItemInHand(hand))
                 : InteractionResultHolder.fail(player.getItemInHand(hand));
     }
 
-    private static boolean canUseHealingItem(Player player) {
+    @Override
+    public boolean needsHealing(AbstractDamageablePart part) {
+        return !CommonUtils.isPartVisuallyFull(part);
+    }
+
+    private static boolean canUseHealingItem(Player player, ItemHealing itemHealing) {
         AbstractPlayerDamageModel damageModel = CommonUtils.getDamageModel(player);
         if (damageModel == null) {
             return false;
@@ -59,7 +65,7 @@ public class HealingItemApiHelperImpl extends HealingItemApiHelper {
 
         for (EnumPlayerPart part : EnumPlayerPart.VALUES) {
             var damageablePart = damageModel.getFromEnum(part);
-            if (damageablePart.activeHealer == null && !CommonUtils.isPartVisuallyFull(damageablePart)) {
+            if (damageablePart.activeHealer == null && itemHealing.canTreat(damageablePart)) {
                 return true;
             }
         }

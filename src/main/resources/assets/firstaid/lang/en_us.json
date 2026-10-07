@@ -250,5 +250,15 @@
   "firstaid.command.pain.display.blur.off": "Pain radial blur disabled",
   "firstaid.tip.commands.addiction.label": "Addiction",
   "firstaid.tip.commands.addiction.detail": "Admin-only addiction tools\nQuery: /firstaid addiction <player>\nSet: /firstaid addiction set <player> <0-100>\nPlayers cannot view their own addiction\nClick to fill: /firstaid addiction set @s 0",
-  "firstaid.config.hideplayermodelindicators": "Hide player-model HUD indicators"
+  "firstaid.config.hideplayermodelindicators": "Hide player-model HUD indicators",
+  "item.firstaid.tourniquet": "Tourniquet",
+  "item.firstaid.splint": "Splint",
+  "item.firstaid.trauma_kit": "Trauma Kit",
+  "firstaid.tooltip.tourniquet": "Stops any bleed on an arm, leg or foot",
+  "firstaid.tooltip.splint": "Sets a fractured arm, leg or foot",
+  "firstaid.tooltip.trauma_kit": "Quickly restores a body part and stops every bleed on it",
+  "death.attack.firstaid_bleed_out": "%1$s bled out",
+  "firstaid.command.injury.bleed": "Set bleed level of %2$s on %1$s to %3$s (0 none, 1 light, 2 heavy)",
+  "firstaid.command.injury.fracture": "Set fracture of %2$s on %1$s to %3$s",
+  "firstaid.command.injury.clear": "Cleared all bleeds and fractures of %s"
 }

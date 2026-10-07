@@ -19,6 +19,7 @@
 
 package ichttt.mods.firstaid.api.healing;
 
+import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
@@ -39,6 +40,11 @@ public abstract class HealingItemApiHelper {
     public static void setImpl(HealingItemApiHelper impl) {
         INSTANCE = impl;
     }
+
+    /**
+     * True if the part is missing hit points that a healing item could restore.
+     */
+    public abstract boolean needsHealing(AbstractDamageablePart part);
 
     @Nonnull
     public abstract InteractionResultHolder<ItemStack> onItemRightClick(ItemHealing itemHealing, Level worldIn, Player playerIn, InteractionHand handIn);

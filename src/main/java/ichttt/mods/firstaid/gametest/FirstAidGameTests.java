@@ -350,6 +350,52 @@ public class FirstAidGameTests {
         });
     }
 
+    private static boolean snowballProfileRegistered;
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void hitProfilesScaleAndRedefineTheDamageOfAmmunition(GameTestHelper helper) {
+        if (!snowballProfileRegistered) {
+            snowballProfileRegistered = true;
+            // snowballs stand in for a mod's ammunition: double power, and the damage value means limb hit points
+            ichttt.mods.firstaid.api.damage.HitProfiles.register(source -> source.getDirectEntity() instanceof net.minecraft.world.entity.projectile.Snowball
+                    ? new ichttt.mods.firstaid.api.damage.HitProfile(2.0F, true, 0.0F, 1.0F, -1.0F, 0.0F, -1.0F, false)
+                    : null);
+        }
+        ServerPlayer player = survivalPlayer(helper);
+        PlayerDamageModel model = model(helper, player);
+        net.minecraft.world.entity.projectile.Snowball ammo = helper.spawn(EntityType.SNOWBALL, 1, 1, 1);
+        helper.runAfterDelay(SPAWN_PROTECTION_TICKS, () -> {
+            float before = limbSum(model);
+            helper.assertTrue(player.hurt(player.damageSources().thrown(ammo, null), 3.0F), "hurt() was rejected");
+            // 3 limb hit points x 2 power; a vanilla-unit 3 would have been about 61
+            near(helper, "limb hit points lost", before - limbSum(model), 6.0F, 0.3F);
+            ammo.discard();
+            leave(helper, player);
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = EMPTY)
+    public static void hitProfileBleedBonusAlwaysOpensABleed(GameTestHelper helper) {
+        ServerPlayer player = survivalPlayer(helper);
+        PlayerDamageModel after = model(helper, player);
+        Arrow arrow = helper.spawn(EntityType.ARROW, 1, 1, 1);
+        DamageSource hit = player.damageSources().arrow(arrow, null);
+        ichttt.mods.firstaid.api.damage.HitProfile heavy = new ichttt.mods.firstaid.api.damage.HitProfile(1.0F, false, 0.0F, 1.0F, 0.01F, 0.0F, -1.0F, false);
+        for (int i = 0; i < 40; i++) {
+            PlayerDamageModel before = new PlayerDamageModel();
+            before.deserializeNBT(after.serializeNBT());
+            after.BODY.bleedLevel = AbstractDamageablePart.BLEED_NONE;
+            after.BODY.currentHealth = before.BODY.currentHealth - 1.0F;
+            ichttt.mods.firstaid.api.damage.HitProfiles.run(heavy, () -> InjuryEngine.onDamaged(player, after, before, hit));
+            helper.assertTrue(after.BODY.bleedLevel == AbstractDamageablePart.BLEED_HEAVY || i < 39, "bonus 1.0 should (almost) always bleed, and a tiny threshold makes it heavy");
+            after.BODY.currentHealth = before.BODY.currentHealth;
+        }
+        arrow.discard();
+        leave(helper, player);
+        helper.succeed();
+    }
+
     @GameTest(template = EMPTY)
     public static void lethalWritesKillThroughTheLimbModel(GameTestHelper helper) {
         ServerPlayer player = survivalPlayer(helper);

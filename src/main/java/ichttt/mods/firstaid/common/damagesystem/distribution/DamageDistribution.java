@@ -22,6 +22,7 @@ import ichttt.mods.firstaid.FirstAid;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
+import ichttt.mods.firstaid.api.damage.HitProfiles;
 import ichttt.mods.firstaid.api.distribution.IDamageDistributionAlgorithm;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.api.event.FirstAidLivingDamageEvent;
@@ -161,7 +162,7 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
         // The damage that arrives here is in vanilla units (it already went through armor math tuned for them);
         // limb hit points are engine units, so the conversion happens right where hit points are removed.
         float unit = HealthUnits.engineHpPerVanillaHp(player, damageModel);
-        float overkillFactor = FirstAidConfig.SERVER.limbOverkillFactor.get().floatValue();
+        float overkillFactor = HitProfiles.current().overkillFactorOr(FirstAidConfig.SERVER.limbOverkillFactor.get().floatValue());
         for (AbstractDamageablePart part : damageableParts) {
             float minHealth = minHealth(player, part);
             float damageMultiplier = getIncomingPartDamageMultiplier(damageModel, part);

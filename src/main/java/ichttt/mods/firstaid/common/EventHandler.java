@@ -21,6 +21,8 @@ package ichttt.mods.firstaid.common;
 import ichttt.mods.firstaid.FirstAid;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
+import ichttt.mods.firstaid.api.damage.HitProfile;
+import ichttt.mods.firstaid.api.damage.HitProfiles;
 import ichttt.mods.firstaid.api.distribution.IDamageDistributionAlgorithm;
 import ichttt.mods.firstaid.common.damagesystem.PlayerDamageModel;
 import ichttt.mods.firstaid.common.damagesystem.distribution.DamageDistribution;
@@ -157,6 +159,10 @@ public class EventHandler {
         AbstractPlayerDamageModel damageModel = CommonUtils.getDamageModel(player);
         if (damageModel == null) return false;
         boolean addStat = amountToDamage < 3.4028235E37F;
+        HitProfile hitProfile = HitProfiles.resolve(source);
+        if (hitProfile != null && addStat) {
+            amountToDamage *= hitProfile.damageMultiplier();
+        }
         IDamageDistributionAlgorithm damageDistribution = getForcedDamageDistribution(source);
         boolean hasForcedDamageDistribution = damageDistribution != null;
         if (damageDistribution == null) {
@@ -211,7 +217,7 @@ public class EventHandler {
         float finalAmountToDamage = amountToDamage;
         boolean redistributeLeftoverDamage = shouldRedistributeLeftoverDamage(source);
         CommonUtils.runWithoutSetHealthInterception(
-                () -> DamageDistribution.handleDamageTaken(finalDamageDistribution, damageModel, finalAmountToDamage, player, source, addStat, redistributeLeftoverDamage));
+                () -> HitProfiles.run(hitProfile, () -> DamageDistribution.handleDamageTaken(finalDamageDistribution, damageModel, finalAmountToDamage, player, source, addStat, redistributeLeftoverDamage)));
         return true;
     }
 

@@ -3,6 +3,8 @@ package ichttt.mods.firstaid.common.health;
 
 import ichttt.mods.firstaid.FirstAid;
 import ichttt.mods.firstaid.FirstAidConfig;
+import ichttt.mods.firstaid.api.damage.HitProfile;
+import ichttt.mods.firstaid.api.damage.HitProfiles;
 import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
@@ -135,8 +137,9 @@ public final class InjuryEngine {
         if (player.level().isClientSide()) {
             return;
         }
-        boolean bleedSource = isBleedingSource(source);
-        FractureCause cause = fractureCause(source, bleedSource);
+        HitProfile profile = HitProfiles.current();
+        boolean bleedSource = isBleedingSource(source) || profile != HitProfile.NEUTRAL;
+        FractureCause cause = profile.explosive() ? FractureCause.EXPLOSION : fractureCause(source, bleedSource);
         RandomSource random = player.getRandom();
         FirstAidConfig.Server config = FirstAidConfig.SERVER;
         boolean changed = false;
@@ -149,9 +152,9 @@ public final class InjuryEngine {
             }
             double hitFraction = lost / (double) now.getMaxHealth();
             if (bleedSource && config.bleedingEnabled.get()) {
-                double chance = bleedChance(config.bleedChanceBase.get(), config.bleedChancePerHitFraction.get(), hitFraction);
+                double chance = Math.min(MAX_BLEED_CHANCE, bleedChance(config.bleedChanceBase.get(), config.bleedChancePerHitFraction.get(), hitFraction) + profile.bleedChanceBonus());
                 if (random.nextDouble() < chance) {
-                    byte level = bleedLevelFor(hitFraction, config.heavyBleedHitFraction.get());
+                    byte level = bleedLevelFor(hitFraction, profile.heavyBleedHitFractionOr(config.heavyBleedHitFraction.get().floatValue()));
                     if (level > now.bleedLevel) {
                         now.bleedLevel = level;
                         changed = true;
@@ -159,7 +162,7 @@ public final class InjuryEngine {
                 }
             }
             if (!now.fractured && canFracture(partId) && config.fracturesEnabled.get()) {
-                if (random.nextDouble() < fractureChance(cause, hitFraction)) {
+                if (random.nextDouble() < Math.min(1.0D, fractureChance(cause, hitFraction) + profile.fractureChanceBonus())) {
                     now.fractured = true;
                     changed = true;
                 }

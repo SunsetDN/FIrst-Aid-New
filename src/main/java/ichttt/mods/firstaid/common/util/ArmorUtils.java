@@ -20,6 +20,7 @@ package ichttt.mods.firstaid.common.util;
 
 import com.google.common.math.DoubleMath;
 import ichttt.mods.firstaid.FirstAid;
+import ichttt.mods.firstaid.api.damage.HitProfiles;
 import ichttt.mods.firstaid.FirstAidConfig;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -173,6 +174,7 @@ public class ArmorUtils {
     @SuppressWarnings("JavadocReference")
     public static float applyArmor(@Nonnull Player entity, @Nonnull ItemStack itemStack, @Nonnull DamageSource source, float damage, @Nonnull EquipmentSlot slot) {
         if (source.is(DamageTypeTags.BYPASSES_ARMOR)) return damage;
+        final float unreducedDamage = damage;
         Item item = itemStack.getItem();
         float totalArmor = 0F;
         float totalToughness = 0F;
@@ -194,6 +196,11 @@ public class ArmorUtils {
             float vanillaDamage = CombatRules.getDamageAfterAbsorb(
                     entity, damage, source, entity.getArmorValue(), (float) entity.getAttributeValue(Attributes.ARMOR_TOUGHNESS));
             damage = Math.max(localDamage, vanillaDamage);
+            // Penetrating ammunition lets part of the damage through no matter what is worn
+            float pierce = HitProfiles.current().armorPierce();
+            if (pierce > 0.0F) {
+                damage += (unreducedDamage - damage) * Math.min(pierce, 1.0F);
+            }
         }
         return damage;
     }

@@ -2,6 +2,7 @@
 package ichttt.mods.firstaid.common.health;
 
 import ichttt.mods.firstaid.FirstAid;
+import ichttt.mods.firstaid.api.damage.HitProfiles;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
@@ -83,7 +84,7 @@ public final class HealthUnits {
             return 1.0F;
         }
         DamageSource active = CommonUtils.getActiveDamageSource();
-        if (active != null && active.is(RAW_DAMAGE)) {
+        if ((active != null && active.is(RAW_DAMAGE)) || HitProfiles.current().damageIsLimbHp()) {
             return 1.0F;
         }
         return engineHpPerVanillaHp(isRaw(), model.getCurrentMaxHealth(), player.getMaxHealth());

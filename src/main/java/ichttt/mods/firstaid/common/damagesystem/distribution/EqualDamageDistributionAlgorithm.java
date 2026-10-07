@@ -140,7 +140,6 @@ public class EqualDamageDistributionAlgorithm implements IDamageDistributionAlgo
         if (damageModel == null) return 0F;
         damage = DamageDistribution.consumeGlobalAbsorption(player, damage);
         if (damage <= 0.0F) {
-            CommonUtils.syncDamageModel((ServerPlayer) player);
             return 0.0F;
         }
 
@@ -148,7 +147,6 @@ public class EqualDamageDistributionAlgorithm implements IDamageDistributionAlgo
         if (result.damageLeft > 0F && tryNoKill)
             result = distributeOnParts(damage, damageModel, player, false);
 
-        CommonUtils.syncDamageModel((ServerPlayer) player);
         float effectiveDmg = result.effectiveDamageDone;
         if (effectiveDmg < 3.4028235E37F) {
             player.awardStat(Stats.DAMAGE_TAKEN, Math.round(effectiveDmg * 10.0F));

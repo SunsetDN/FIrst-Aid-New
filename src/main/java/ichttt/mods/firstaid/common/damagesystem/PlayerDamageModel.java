@@ -252,9 +252,42 @@ implements LookupReloadListener {
     }
 
     public PlayerDamageModel() {
+        this(true);
+    }
+
+    private PlayerDamageModel(boolean registerForLookupReloads) {
         super(new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthHead), safeGet(FirstAidConfig.SERVER.causeDeathHead), EnumPlayerPart.HEAD), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthLeftArm), false, EnumPlayerPart.LEFT_ARM), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthLeftLeg), false, EnumPlayerPart.LEFT_LEG), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthLeftFoot), false, EnumPlayerPart.LEFT_FOOT), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthBody), safeGet(FirstAidConfig.SERVER.causeDeathBody), EnumPlayerPart.BODY), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthRightArm), false, EnumPlayerPart.RIGHT_ARM), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthRightLeg), false, EnumPlayerPart.RIGHT_LEG), new DamageablePart(safeGet(FirstAidConfig.SERVER.maxHealthRightFoot), false, EnumPlayerPart.RIGHT_FOOT));
         this.noCritical = !safeGet(FirstAidConfig.SERVER.causeDeathBody) && !safeGet(FirstAidConfig.SERVER.causeDeathHead);
-        FirstAidRegistryLookups.registerReloadListener(this);
+        if (registerForLookupReloads) {
+            FirstAidRegistryLookups.registerReloadListener(this);
+        }
+    }
+
+    /**
+     * A cheap copy of the limb state (hit points, bleeds, fractures) for before/after comparisons. Unlike a copy made
+     * through NBT it does not serialize the whole model and does not register for lookup reloads (which rebuilds the
+     * debuff tables of the new instance), so it is fine to take one on every hit.
+     */
+    public PlayerDamageModel snapshotLimbs() {
+        PlayerDamageModel copy = new PlayerDamageModel(false);
+        for (AbstractDamageablePart part : this) {
+            AbstractDamageablePart target = copy.getFromEnum(part.part);
+            target.setMaxHealth(part.getMaxHealth());
+            target.currentHealth = part.currentHealth;
+            target.bleedLevel = part.bleedLevel;
+            target.fractured = part.fractured;
+        }
+        return copy;
+    }
+
+    /** Puts the limb state of {@code snapshot} (see {@link #snapshotLimbs()}) back. */
+    public void restoreLimbs(PlayerDamageModel snapshot) {
+        for (AbstractDamageablePart part : this) {
+            AbstractDamageablePart source = snapshot.getFromEnum(part.part);
+            part.currentHealth = source.currentHealth;
+            part.bleedLevel = source.bleedLevel;
+            part.fractured = source.fractured;
+        }
     }
 
     @Override

@@ -54,7 +54,8 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
         if (FirstAidConfig.GENERAL.debug.get()) {
             FirstAid.LOGGER.info(LoggingMarkers.DAMAGE_DISTRIBUTION, "--- Damaging {} using {} for dmg source {}, redistribute {}, addStat {} ---", damage, damageDistribution.toString(), source.type().msgId(), redistributeIfLeft, addStat);
         }
-        CompoundTag beforeCache = damageModel.serializeNBT();
+        PlayerDamageModel before = damageModel instanceof PlayerDamageModel limbModel ? limbModel.snapshotLimbs() : null;
+        CompoundTag beforeCache = before == null ? damageModel.serializeNBT() : null;
         if (!damageDistribution.skipGlobalPotionModifiers())
             damage = ArmorUtils.applyGlobalPotionModifiers(player, source, damage);
         //VANILLA COPY - combat tracker and exhaustion
@@ -72,12 +73,19 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
                 left = damageDistribution.distributeDamage(left, player, source, addStat);
             }
         }
-        PlayerDamageModel before = new PlayerDamageModel();
-        before.deserializeNBT(beforeCache);
+        if (before == null) {
+            before = new PlayerDamageModel();
+            before.deserializeNBT(beforeCache);
+        }
         FirstAidLivingDamageEvent event = new FirstAidLivingDamageEvent(player, damageModel, before, source, left);
         NeoForge.EVENT_BUS.post(event);
         if (event.isCanceled()) {
-            damageModel.deserializeNBT(beforeCache); //restore prev state
+            if (damageModel instanceof PlayerDamageModel limbModel) {
+                limbModel.restoreLimbs(before); //restore prev state
+            } else {
+                damageModel.deserializeNBT(beforeCache);
+            }
+            syncOnce(player, damageModel);
             if (FirstAidConfig.GENERAL.debug.get()) {
                 FirstAid.LOGGER.info(LoggingMarkers.DAMAGE_DISTRIBUTION, "--- DONE! Event got canceled ---");
             }
@@ -92,10 +100,18 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
         }
         if (damageModel.isDead(player))
             CommonUtils.killPlayer(damageModel, player, source);
+        syncOnce(player, damageModel);
         if (FirstAidConfig.GENERAL.debug.get()) {
             FirstAid.LOGGER.info(LoggingMarkers.DAMAGE_DISTRIBUTION, "--- DONE! {} still left ---", left);
         }
         return left;
+    }
+
+    /** One client sync per hit instead of one per damaged part (every sync serializes the whole model). */
+    private static void syncOnce(Player player, AbstractPlayerDamageModel damageModel) {
+        if (player instanceof ServerPlayer serverPlayer) {
+            CommonUtils.syncDamageModel(serverPlayer);
+        }
     }
 
     private static boolean isNoKillRandomDistribution(IDamageDistributionAlgorithm damageDistribution) {
@@ -153,7 +169,6 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
             float scaledLeft = part.damage(scaledDamage, player, !player.hasEffect(RegistryObjects.PAINKILLER_EFFECT), minHealth);
             float scaledDamageDone = scaledDamage - scaledLeft;
             float dmgConsumed = Math.min(damage, restoreOriginalDamageScale(scaledDamageDone, damageMultiplier * unit));
-            CommonUtils.syncDamageModel((ServerPlayer) player);
             if (addStat)
                 player.awardStat(Stats.DAMAGE_TAKEN, Math.round(scaledDamageDone / unit * 10.0F));
             damage = Math.max(0.0F, damage - dmgConsumed);
@@ -182,7 +197,6 @@ public abstract class DamageDistribution implements IDamageDistributionAlgorithm
         }
         damage = consumeGlobalAbsorption(player, damage);
         if (damage <= 0.0F) {
-            CommonUtils.syncDamageModel((ServerPlayer) player);
             return 0.0F;
         }
         for (Pair<EquipmentSlot, EnumPlayerPart[]> pair : getPartList()) {

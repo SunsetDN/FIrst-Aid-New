@@ -322,6 +322,34 @@ public class FirstAidGameTests {
         });
     }
 
+    /** Prints how long the hot paths take; not a pass/fail check (the numbers depend on the machine). */
+    @GameTest(template = EMPTY, batch = "benchmark", timeoutTicks = 400, required = false)
+    public static void benchmarkHotPaths(GameTestHelper helper) {
+        ServerPlayer player = survivalPlayer(helper);
+        PlayerDamageModel model = model(helper, player);
+        helper.runAfterDelay(SPAWN_PROTECTION_TICKS, () -> {
+            int hits = 3000;
+            DamageSource magic = player.damageSources().magic();
+            long start = System.nanoTime();
+            for (int i = 0; i < hits; i++) {
+                player.invulnerableTime = 0;
+                player.hurt(magic, 0.001F);
+                for (AbstractDamageablePart part : model) {
+                    part.currentHealth = part.getMaxHealth();
+                }
+            }
+            long hurtNs = System.nanoTime() - start;
+            start = System.nanoTime();
+            for (int i = 0; i < hits; i++) {
+                player.heal(0.001F);
+            }
+            long healNs = System.nanoTime() - start;
+            FirstAid.LOGGER.info("BENCH hurt: {} us/hit, heal: {} us/call", hurtNs / hits / 1000.0, healNs / hits / 1000.0);
+            leave(helper, player);
+            helper.succeed();
+        });
+    }
+
     @GameTest(template = EMPTY)
     public static void lethalWritesKillThroughTheLimbModel(GameTestHelper helper) {
         ServerPlayer player = survivalPlayer(helper);

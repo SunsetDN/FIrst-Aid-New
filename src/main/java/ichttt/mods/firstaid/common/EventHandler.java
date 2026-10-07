@@ -403,7 +403,7 @@ public class EventHandler {
             return;
         float amount = event.getAmount();
         //Hacky shit to reduce vanilla regen
-        boolean fromFood = Arrays.stream(Thread.currentThread().getStackTrace()).anyMatch(stackTraceElement -> stackTraceElement.getClassName().equals(FoodData.class.getName()));
+        boolean fromFood = HealthDistribution.IN_FOOD_TICK.get();
         if (fromFood) {
             amount = amount * (float) (double) FirstAidConfig.SERVER.naturalRegenMultiplier.get();
         } else {

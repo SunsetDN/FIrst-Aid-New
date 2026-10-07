@@ -37,6 +37,9 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class HealthDistribution {
+    /** True while vanilla's FoodData#tick runs (set by FoodDataMixin), i.e. while a heal comes from natural regeneration. */
+    public static final ThreadLocal<Boolean> IN_FOOD_TICK = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
     private static final List<EnumPlayerPart> parts;
 
     static {
@@ -90,7 +93,9 @@ public class HealthDistribution {
                 playerDamageModel.refreshPainState(player);
                 playerDamageModel.syncVanillaHealth(player);
             }
-            CommonUtils.syncDamageModel((ServerPlayer) player);
+            // Healing can arrive every tick (regeneration, other mods); the resync is coalesced instead of sending the
+            // whole model each time.
+            damageModel.scheduleResync();
         }
     }
 
@@ -141,7 +146,7 @@ public class HealthDistribution {
                 playerDamageModel.refreshPainState(player);
                 playerDamageModel.syncVanillaHealth(player);
             }
-            CommonUtils.syncDamageModel((ServerPlayer) player);
+            damageModel.scheduleResync();
         }
     }
 

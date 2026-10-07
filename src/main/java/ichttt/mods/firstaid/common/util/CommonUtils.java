@@ -231,9 +231,14 @@ public class CommonUtils {
         if (player == null) {
             return null;
         }
-        LazyOptional<AbstractPlayerDamageModel> optionalDamageModel = getOptionalDamageModel(player);
         try {
-            return optionalDamageModel.orElseThrow(() -> new IllegalArgumentException("Player " + player.getName().getContents() + " is missing a damage model!"));
+            // Attachment data is created on first access, so there is no need to go through a LazyOptional (this runs on
+            // every player tick and every hit).
+            AbstractPlayerDamageModel model = player.getData(FirstAidDataAttachments.DAMAGE_MODEL.get());
+            if (model == null) {
+                throw new IllegalArgumentException("Player " + player.getName().getContents() + " is missing a damage model!");
+            }
+            return model;
         } catch (IllegalArgumentException e) {
             // This is a band-aid solution, as bug reports about this keep coming up and these are really hard to debug bugs
             // I don't have the time to correctly debug this, so it seems like there is no other way right now

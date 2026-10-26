@@ -610,7 +610,11 @@ public class EventHandler {
             AbstractPlayerDamageModel damageModel = CommonUtils.getDamageModel(player);
             if (damageModel == null) return;
             damageModel.runScaleLogic(player);
-            damageModel.forEach(damageablePart -> damageablePart.heal(damageablePart.getMaxHealth(), player, false));
+            // Respawn is a new body: surgery penalties go and destroyed limbs come back (heal() alone would refuse them)
+            damageModel.forEach(damageablePart -> {
+                damageablePart.surgeryPenalty = 0F;
+                damageablePart.currentHealth = damageablePart.getMaxHealth();
+            });
             if (damageModel instanceof PlayerDamageModel playerDamageModel) {
                 playerDamageModel.clearStatusEffects();
                 playerDamageModel.clearInjuries();

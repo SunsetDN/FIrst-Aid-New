@@ -66,8 +66,12 @@ public class DamageablePart extends AbstractDamageablePart {
     public float heal(float amount, @Nullable Player player, boolean applyDebuff) {
         if (amount <= 0F)
             return 0F;
-        float notFitting = Math.abs(Math.min(0F, maxHealth - (currentHealth + amount)));
-        currentHealth = Math.min(maxHealth, currentHealth + amount);
+        // A destroyed limb only comes back through surgery (which sets its health directly)
+        if (isDestroyed())
+            return amount;
+        float cap = effectiveMaxHealth();
+        float notFitting = Math.abs(Math.min(0F, cap - (currentHealth + amount)));
+        currentHealth = Math.min(cap, currentHealth + amount);
         if (notFitting > 0) {
             float oldHealth = currentHealth;
             currentHealth = Math.min(currentHealth + notFitting, currentHealth);
@@ -161,6 +165,15 @@ public class DamageablePart extends AbstractDamageablePart {
         if (fractured) {
             compound.putBoolean("fractured", true);
         }
+        if (dressedWound != BLEED_NONE) {
+            compound.putByte("dressedWound", dressedWound);
+        }
+        if (tourniquetTicks >= 0) {
+            compound.putInt("tourniquetTicks", tourniquetTicks);
+        }
+        if (surgeryPenalty > 0F) {
+            compound.putFloat("surgeryPenalty", surgeryPenalty);
+        }
         if (FirstAidConfig.SERVER.scaleMaxHealth.get())
             compound.putInt("maxHealth", maxHealth);
         if (activeHealer != null) {
@@ -182,6 +195,9 @@ public class DamageablePart extends AbstractDamageablePart {
         absorption = 0F;
         bleedLevel = (byte) Math.max(BLEED_NONE, Math.min(BLEED_HEAVY, nbt.getByte("bleed")));
         fractured = nbt.getBoolean("fractured");
+        dressedWound = (byte) Math.max(BLEED_NONE, Math.min(BLEED_HEAVY, nbt.getByte("dressedWound")));
+        tourniquetTicks = nbt.contains("tourniquetTicks", Tag.TAG_ANY_NUMERIC) ? nbt.getInt("tourniquetTicks") : -1;
+        surgeryPenalty = Math.max(0F, Math.min(MAX_SURGERY_PENALTY, nbt.getFloat("surgeryPenalty")));
         // Restore max health before current health so scaled limbs are not clamped to the
         // unscaled config cap on world load (see GitHub issue #5).
         if (nbt.contains("maxHealth", Tag.TAG_ANY_NUMERIC)) {

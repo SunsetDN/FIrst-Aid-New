@@ -36,6 +36,12 @@ import net.minecraft.world.entity.projectile.Projectile;
  * EFT-style injuries on top of the plain limb hit points: bleeds (light/heavy) that drain a limb every second and
  * fractures that cripple arms and legs until splinted.
  * <p>
+ * Wound care (marker {@code realistic-wound-care}): a stopped bleed leaves a <em>dressed wound</em> that a new hit on that
+ * part reopens (moving does not) until a suture kit closes it. A tourniquet stops a limb's bleed at once but starts an ischemia
+ * clock: real-world times ({@link #TOURNIQUET_SAFE_REAL_SECONDS}, {@link #TOURNIQUET_LIMB_LOSS_REAL_SECONDS}) run
+ * {@code medicalTimeCompression} times faster in game. Converting it (hemostatic or bandage strong enough for the wound) or
+ * suturing takes it off. A limb at 0 hit points is destroyed and only surgery brings it back, at a reduced maximum.
+ * <p>
  * The decision functions are static and free of game state so they can be tested in isolation.
  */
 public final class InjuryEngine {
@@ -55,6 +61,13 @@ public final class InjuryEngine {
     private static final double ARM_BREAK_PENALTY = 0.30D;
     private static final double MAX_ARM_PENALTY = 0.7D;
     private static final double MAX_BLEED_CHANCE = 0.95D;
+
+    /** Reassess / convert a tourniquet within 2 h (TCCC proposed change 25-2, J Spec Oper Med). SOURCED. */
+    public static final int TOURNIQUET_SAFE_REAL_SECONDS = 2 * 3600;
+    /** Warm ischemia commonly cited as the limit for limb salvage, 6 h. ESTIMATE (only secondary sources were reachable). */
+    public static final int TOURNIQUET_LIMB_LOSS_REAL_SECONDS = 6 * 3600;
+    /** Hit points left on a limb brought back by surgery. DESIGN. */
+    public static final float SURGERY_RESTORED_HEALTH = 1.0F;
 
     private InjuryEngine() {
     }
@@ -112,12 +125,77 @@ public final class InjuryEngine {
 
     // ---------------------------------------------------------------- treatment helpers
 
+    /** Stops a bleed up to {@code strongestLevelStopped}; the wound stays dressed (it can reopen) until sutured. */
     public static boolean stopBleed(AbstractDamageablePart part, byte strongestLevelStopped) {
         if (part.bleedLevel == AbstractDamageablePart.BLEED_NONE || part.bleedLevel > strongestLevelStopped) {
             return false;
         }
+        part.dressedWound = (byte) Math.max(part.dressedWound, part.bleedLevel);
         part.bleedLevel = AbstractDamageablePart.BLEED_NONE;
         return true;
+    }
+
+    /** Ties a tourniquet on a bleeding limb: the bleed stops at once (dressed under it) and the ischemia clock starts. */
+    public static boolean applyTourniquet(AbstractDamageablePart part) {
+        if (!isLimb(part.part) || part.bleedLevel == AbstractDamageablePart.BLEED_NONE) {
+            return false;
+        }
+        stopBleed(part, AbstractDamageablePart.BLEED_HEAVY);
+        if (!part.hasTourniquet()) {
+            part.tourniquetTicks = 0;
+        }
+        return true;
+    }
+
+    /** Takes a tourniquet off once the wound under it is dressed with something strong enough for it (tourniquet conversion). */
+    public static boolean convertTourniquet(AbstractDamageablePart part, byte strongestLevelDressed) {
+        if (!part.hasTourniquet() || part.dressedWound > strongestLevelDressed || part.isDestroyed()) {
+            return false;
+        }
+        part.tourniquetTicks = -1;
+        return true;
+    }
+
+    /** Closes a dressed wound for good (and takes off a tourniquet). Not on an open bleed: stop it first. */
+    public static boolean suture(AbstractDamageablePart part) {
+        if (part.bleedLevel != AbstractDamageablePart.BLEED_NONE || part.isDestroyed()
+                || (part.dressedWound == AbstractDamageablePart.BLEED_NONE && !part.hasTourniquet())) {
+            return false;
+        }
+        part.dressedWound = AbstractDamageablePart.BLEED_NONE;
+        part.tourniquetTicks = -1;
+        return true;
+    }
+
+    /** Brings a destroyed limb back to {@link #SURGERY_RESTORED_HEALTH}, permanently losing {@code penalty} of its max hit points. */
+    public static boolean surgery(AbstractDamageablePart part, float penalty) {
+        if (!part.isDestroyed()) {
+            return false;
+        }
+        part.surgeryPenalty = Math.min(AbstractDamageablePart.MAX_SURGERY_PENALTY, part.surgeryPenalty + penalty);
+        part.currentHealth = Math.min(SURGERY_RESTORED_HEALTH, part.effectiveMaxHealth());
+        part.bleedLevel = AbstractDamageablePart.BLEED_NONE;
+        part.dressedWound = AbstractDamageablePart.BLEED_NONE;
+        part.tourniquetTicks = -1;
+        return true;
+    }
+
+    /** Game ticks of a real-world duration at the configured time compression. */
+    public static int compressedTicks(int realSeconds) {
+        return compressedTicks(realSeconds, FirstAidConfig.SERVER.medicalTimeCompression.get());
+    }
+
+    /** Pure form of {@link #compressedTicks(int)}. */
+    public static int compressedTicks(int realSeconds, double compression) {
+        return (int) Math.max(1L, Math.round(realSeconds * 20.0D / Math.max(1.0D, compression)));
+    }
+
+    /** Ischemia stage of a tourniquet that has been on for {@code ticks}: 0 safe, 1 damaging the limb, 2 limb lost. Pure. */
+    public static int ischemiaStage(int ticks, int safeTicks, int lossTicks) {
+        if (ticks < 0 || ticks < safeTicks) {
+            return 0;
+        }
+        return ticks < lossTicks ? 1 : 2;
     }
 
     public static boolean fixFracture(AbstractDamageablePart part) {
@@ -151,6 +229,12 @@ public final class InjuryEngine {
                 continue;
             }
             double hitFraction = lost / (double) now.getMaxHealth();
+            // A new hit tears a dressed wound open again; a tourniquet above it keeps it shut
+            if (now.dressedWound != AbstractDamageablePart.BLEED_NONE && !now.hasTourniquet() && !now.isDestroyed()) {
+                now.bleedLevel = (byte) Math.max(now.bleedLevel, now.dressedWound);
+                now.dressedWound = AbstractDamageablePart.BLEED_NONE;
+                changed = true;
+            }
             if (bleedSource && config.bleedingEnabled.get()) {
                 double chance = Math.min(MAX_BLEED_CHANCE, bleedChance(config.bleedChanceBase.get(), config.bleedChancePerHitFraction.get(), hitFraction) + profile.bleedChanceBonus());
                 if (random.nextDouble() < chance) {
@@ -193,6 +277,7 @@ public final class InjuryEngine {
             return;
         }
         if (player.tickCount % 20 == 0) {
+            tickTourniquets(player, model);
             tickBleeding(player, model);
         }
         updateFractureEffects(player, model);
@@ -237,6 +322,38 @@ public final class InjuryEngine {
         }
         if ((drained || stateChanged) && player instanceof ServerPlayer serverPlayer) {
             CommonUtils.syncDamageModel(serverPlayer);
+        }
+    }
+
+    /** Once a second: advances every tourniquet's clock, drains the limb past the safe time and destroys it past the loss time. */
+    private static void tickTourniquets(Player player, PlayerDamageModel model) {
+        int safe = compressedTicks(TOURNIQUET_SAFE_REAL_SECONDS);
+        int loss = compressedTicks(TOURNIQUET_LIMB_LOSS_REAL_SECONDS);
+        boolean changed = false;
+        for (AbstractDamageablePart part : model) {
+            if (!part.hasTourniquet() || part.isDestroyed()) {
+                continue;
+            }
+            int before = ischemiaStage(part.tourniquetTicks, safe, loss);
+            part.tourniquetTicks += 20;
+            int stage = ischemiaStage(part.tourniquetTicks, safe, loss);
+            if (stage == 1) {
+                float drain = (float) (part.getMaxHealth() * FirstAidConfig.SERVER.ischemiaPercentPerSecond.get() / 100.0D);
+                // Ischemia alone never empties the limb; the loss time does that
+                part.damage(drain, player, false, Math.min(1.0F, part.currentHealth));
+            } else if (stage == 2) {
+                part.currentHealth = 0.0F;
+            }
+            // Sync on a stage change, while damaging, and every 10 s for the HUD timer
+            if (stage != before || stage == 1 || part.tourniquetTicks % 200 == 0) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            model.syncVanillaHealth(player);
+            if (player instanceof ServerPlayer serverPlayer) {
+                CommonUtils.syncDamageModel(serverPlayer);
+            }
         }
     }
 

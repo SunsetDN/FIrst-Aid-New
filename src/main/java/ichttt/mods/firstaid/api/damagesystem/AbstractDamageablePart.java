@@ -48,6 +48,34 @@ public abstract class AbstractDamageablePart implements INBTSerializable<Compoun
     public byte bleedLevel = BLEED_NONE;
     /** True while the bone of this part is broken. Only arms, legs and feet can fracture. */
     public boolean fractured;
+    /**
+     * A wound that was dressed (bandage, hemostatic, medkit) but not sutured: {@link #BLEED_LIGHT} or {@link #BLEED_HEAVY}, the
+     * bleed it would be again. Moving does not reopen it; a new hit on this part does. Only a suture kit closes it for good.
+     */
+    public byte dressedWound = BLEED_NONE;
+    /** Ticks since a tourniquet was tied on this limb, or -1 without one. Past the safe time the limb suffers ischemia. */
+    public int tourniquetTicks = -1;
+    /**
+     * Share of max hit points lost to surgery on a destroyed limb (0..{@value #MAX_SURGERY_PENALTY}); the limb heals only up to
+     * {@link #effectiveMaxHealth()} until death.
+     */
+    public float surgeryPenalty;
+
+    public static final float MAX_SURGERY_PENALTY = 0.8F;
+
+    public boolean hasTourniquet() {
+        return tourniquetTicks >= 0;
+    }
+
+    /** A non-critical limb at 0 hit points ("blacked out"): no medkit or bandage heals it, only surgery. */
+    public boolean isDestroyed() {
+        return !canCauseDeath && currentHealth <= 0.0F;
+    }
+
+    /** Max hit points less what surgery took. */
+    public float effectiveMaxHealth() {
+        return getMaxHealth() * (1.0F - surgeryPenalty);
+    }
 
     public AbstractDamageablePart(int maxHealth, boolean canCauseDeath, @Nonnull EnumPlayerPart playerPart) {
         this.initialMaxHealth = maxHealth;

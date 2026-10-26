@@ -205,6 +205,16 @@ public class FirstAid {
             event.accept(RegistryObjects.TOURNIQUET);
             event.accept(RegistryObjects.SPLINT);
             event.accept(RegistryObjects.TRAUMA_KIT);
+            event.accept(RegistryObjects.CAR_FIRST_AID_KIT);
+            event.accept(RegistryObjects.IFAK);
+            event.accept(RegistryObjects.AFAK);
+            event.accept(RegistryObjects.FIELD_MEDKIT);
+            event.accept(RegistryObjects.CAT_TOURNIQUET);
+            event.accept(RegistryObjects.HEMOSTATIC_GAUZE);
+            event.accept(RegistryObjects.ALUMINUM_SPLINT);
+            event.accept(RegistryObjects.SUTURE_KIT);
+            event.accept(RegistryObjects.SURGICAL_KIT);
+            event.accept(RegistryObjects.FIELD_SURGICAL_KIT);
             event.accept(RegistryObjects.DEFIBRILLATOR);
             event.accept(RegistryObjects.ADRENALINE_INJECTOR);
             event.accept(RegistryObjects.MORPHINE_INJECTOR);

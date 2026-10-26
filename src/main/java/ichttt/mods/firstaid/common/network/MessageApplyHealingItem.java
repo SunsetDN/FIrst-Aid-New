@@ -24,6 +24,7 @@ import ichttt.mods.firstaid.api.damagesystem.AbstractPartHealer;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.api.healing.ItemHealing;
+import ichttt.mods.firstaid.common.items.ItemMedkit;
 import ichttt.mods.firstaid.api.healing.PartHealingContext;
 import ichttt.mods.firstaid.common.init.FirstAidDataAttachments;
 import ichttt.mods.firstaid.common.util.CommonUtils;
@@ -92,7 +93,23 @@ public class MessageApplyHealingItem implements CustomPacketPayload {
                     return;
                 }
 
-                if (!player.getAbilities().instabuild) {
+                if (itemHealing instanceof ItemMedkit medkit && stack.isDamageableItem()) {
+                    // Resource pool: pay for what this part needs, as far as the kit still has it
+                    ItemMedkit.Plan plan = medkit.plan(damageablePart, ItemMedkit.remaining(stack));
+                    int cost = plan.cost(medkit);
+                    if (cost <= 0) {
+                        return;
+                    }
+                    healer = medkit.createHealer(healerStack, plan, player, damageModel);
+                    if (!player.getAbilities().instabuild) {
+                        int nextDamage = stack.getDamageValue() + cost;
+                        if (nextDamage >= stack.getMaxDamage()) {
+                            stack.shrink(1);
+                        } else {
+                            stack.setDamageValue(nextDamage);
+                        }
+                    }
+                } else if (!player.getAbilities().instabuild) {
                     if (stack.isDamageableItem()) {
                         int nextDamage = stack.getDamageValue() + 1;
                         if (nextDamage >= stack.getMaxDamage()) {

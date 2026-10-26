@@ -397,6 +397,12 @@ public class FirstAidConfig {
             heavyBleedPercentPerSecond = builder
                     .comment("Heavy bleed: percent of the limb's max hit points drained per second")
                     .defineInRange("heavyBleedPercentPerSecond", 2.5D, 0D, 100D);
+            medicalTimeCompression = builder
+                    .comment("Real-world medical times (tourniquet limits) run this many times faster in game. 20 = the 2 h tourniquet limit is 6 min")
+                    .defineInRange("medicalTimeCompression", 20.0D, 1.0D, 3600.0D);
+            ischemiaPercentPerSecond = builder
+                    .comment("A tourniquet left on past the safe time drains this percent of the limb's max hit points per second until it comes off")
+                    .defineInRange("ischemiaPercentPerSecond", 0.5D, 0D, 100D);
             fracturesEnabled = builder
                     .comment("If true, hard landings and heavy limb hits can fracture arms, legs and feet")
                     .define("fracturesEnabled", true);
@@ -583,6 +589,8 @@ public class FirstAidConfig {
         public final ModConfigSpec.EnumValue<DamageScaleMode> damageScaleMode;
         public final ModConfigSpec.DoubleValue limbOverkillFactor;
         public final ModConfigSpec.BooleanValue bleedingEnabled;
+        public final ModConfigSpec.DoubleValue medicalTimeCompression;
+        public final ModConfigSpec.DoubleValue ischemiaPercentPerSecond;
         public final ModConfigSpec.DoubleValue bleedChanceBase;
         public final ModConfigSpec.DoubleValue bleedChancePerHitFraction;
         public final ModConfigSpec.DoubleValue heavyBleedHitFraction;
@@ -722,21 +730,21 @@ public class FirstAidConfig {
             builder.comment("Client only configuration settings").push("Overlay");
             vanillaHealthBarMode = builder
                     .comment("The mode how to show the mc vanilla health bar.",
-                            "NORMAL shows the vanilla health value that calculated the way vanillaHealthCalculation is specified (server config)",
+                            "NORMAL (default) shows the vanilla hearts, calculated the way vanillaHealthCalculation is specified (server config; TOTAL_POOL maps the sum of all limb hit points onto max health); per-limb health is the overlay's job (overlayMode)",
                             "HIGHLIGHT_CRITICAL_PATH show the vanilla health value and highlights the health value of the most damaged critical limb (by default head or body) using the hardcore-styled hearts for them and the normal hearts for the rest of the health. Only works if vanillaHealthCalculation is set to AVERAGE_ALL",
-                            "HIDE just doesn't display the vanilla health bar at all.")
+                            "HIDE doesn't display the vanilla hearts; the per-limb readout takes their place.")
                     .translation("firstaid.config.vanillahealthbarmode")
-                    .defineEnum("vanillaHealthBarMode", VanillaHealthbarMode.HIDE);
+                    .defineEnum("vanillaHealthBarMode", VanillaHealthbarMode.NORMAL);
 
             overlayMode = builder
                     .comment("The design to use to visualize the health",
-                            "Defaults to OFF since the hotbar-area health readout (see FirstaidIngameGui) already shows per-part bars persistently")
-                    .defineEnum("overlayMode", OverlayMode.OFF);
+                            "Defaults to PLAYER_MODEL (First Aid's body indicator, top right)")
+                    .defineEnum("overlayMode", OverlayMode.PLAYER_MODEL);
 
             pos = builder
                     .comment("The relative point of the overlay")
                     .translation("firstaid.config.position")
-                    .defineEnum("overlayPosition", Position.TOP_LEFT);
+                    .defineEnum("overlayPosition", Position.TOP_RIGHT);
 
             armorTooltipMode = builder
                     .comment("Determines how first aid should display armor on item tooltips.", "REPLACE replaces the vanilla description with the one fitting first aid\nAPPEND will add the first aid values at the bottom", "NONE will show the old vanilla values. Be advised this is purly visual, interally, the first aid value will always be used")

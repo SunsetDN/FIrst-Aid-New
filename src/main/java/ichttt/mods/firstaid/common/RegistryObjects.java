@@ -24,6 +24,7 @@ import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.healing.ItemHealing;
 import ichttt.mods.firstaid.api.healing.PartHealingContext;
 import ichttt.mods.firstaid.common.health.InjuryEngine;
+import ichttt.mods.firstaid.common.items.ItemMedkit;
 import ichttt.mods.firstaid.common.items.ItemTreatment;
 import ichttt.mods.firstaid.common.damagesystem.PartHealer;
 import ichttt.mods.firstaid.common.items.ItemAdrenalineInjector;
@@ -57,6 +58,17 @@ public class RegistryObjects {
     public static final DeferredItem<ItemHealing> TOURNIQUET;
     public static final DeferredItem<ItemHealing> SPLINT;
     public static final DeferredItem<ItemHealing> TRAUMA_KIT;
+    // Tarkov-level medical items (marker realistic-wound-care). All counts, costs and times are game design.
+    public static final DeferredItem<ItemHealing> CAR_FIRST_AID_KIT;
+    public static final DeferredItem<ItemHealing> IFAK;
+    public static final DeferredItem<ItemHealing> AFAK;
+    public static final DeferredItem<ItemHealing> FIELD_MEDKIT;
+    public static final DeferredItem<ItemHealing> CAT_TOURNIQUET;
+    public static final DeferredItem<ItemHealing> HEMOSTATIC_GAUZE;
+    public static final DeferredItem<ItemHealing> ALUMINUM_SPLINT;
+    public static final DeferredItem<ItemHealing> SUTURE_KIT;
+    public static final DeferredItem<ItemHealing> SURGICAL_KIT;
+    public static final DeferredItem<ItemHealing> FIELD_SURGICAL_KIT;
     public static final DeferredItem<Item> DEFIBRILLATOR;
     public static final DeferredItem<ItemAdrenalineInjector> ADRENALINE_INJECTOR;
     public static final DeferredItem<ItemMorphineInjector> MORPHINE_INJECTOR;
@@ -89,8 +101,8 @@ public class RegistryObjects {
                 properties.stacksTo(16),
                 stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.bandage.secondsPerHeal.get() * 20), server.bandage.totalHeals::get, stack),
                 server.bandage.applyTime::get,
-                (part, missingHealth) -> missingHealth || part.bleedLevel == AbstractDamageablePart.BLEED_LIGHT,
-                context -> closeBleed(context, AbstractDamageablePart.BLEED_LIGHT),
+                (part, missingHealth) -> missingHealth || part.bleedLevel == AbstractDamageablePart.BLEED_LIGHT || lightTourniquet(part),
+                context -> dress(context, AbstractDamageablePart.BLEED_LIGHT),
                 RegistryObjects::getBandageUseSound,
                 null
         ));
@@ -98,18 +110,18 @@ public class RegistryObjects {
                 properties.stacksTo(16),
                 stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.plaster.secondsPerHeal.get() * 20), server.plaster.totalHeals::get, stack),
                 server.plaster.applyTime::get,
-                (part, missingHealth) -> missingHealth || part.bleedLevel == AbstractDamageablePart.BLEED_LIGHT,
-                context -> closeBleed(context, AbstractDamageablePart.BLEED_LIGHT),
+                (part, missingHealth) -> missingHealth || part.bleedLevel == AbstractDamageablePart.BLEED_LIGHT || lightTourniquet(part),
+                context -> dress(context, AbstractDamageablePart.BLEED_LIGHT),
                 RegistryObjects::getBandageUseSound,
                 null
         ));
-        // A tourniquet only exists for limbs, but it stops any bleed there.
+        // A tourniquet only exists for limbs; it stops any bleed there at once but starts the ischemia clock (InjuryEngine).
         TOURNIQUET = ITEM_REGISTER.registerItem("tourniquet", properties -> new ItemTreatment(
                 properties.stacksTo(8),
                 stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.tourniquet.secondsPerHeal.get() * 20), server.tourniquet.totalHeals::get, stack),
                 server.tourniquet.applyTime::get,
                 (part, missingHealth) -> InjuryEngine.isLimb(part.part) && part.bleedLevel != AbstractDamageablePart.BLEED_NONE,
-                context -> closeBleed(context, AbstractDamageablePart.BLEED_HEAVY),
+                RegistryObjects::tieTourniquet,
                 RegistryObjects::getBandageUseSound,
                 "firstaid.tooltip.tourniquet"
         ));
@@ -131,12 +143,87 @@ public class RegistryObjects {
                 properties.stacksTo(4),
                 stack -> new PartHealer(() -> FirstAid.scaleMedicalTimingTicks(server.traumaKit.secondsPerHeal.get() * 20), server.traumaKit.totalHeals::get, stack),
                 server.traumaKit.applyTime::get,
-                (part, missingHealth) -> missingHealth || part.bleedLevel != AbstractDamageablePart.BLEED_NONE,
-                context -> closeBleed(context, AbstractDamageablePart.BLEED_HEAVY),
+                (part, missingHealth) -> missingHealth || part.bleedLevel != AbstractDamageablePart.BLEED_NONE || part.hasTourniquet(),
+                context -> dress(context, AbstractDamageablePart.BLEED_HEAVY),
                 RegistryObjects::getBandageUseSound,
                 "firstaid.tooltip.trauma_kit"
         ));
         DEFIBRILLATOR = ITEM_REGISTER.registerItem("defibrillator", properties -> new Item(properties.durability(3)));
+
+        // Medkits: durability = resource pool in limb hit points (head 35, body 85 by default). Bleed/fracture costs are paid first.
+        // ItemMedkit(properties, applyTimeMillis, secondsPerPulse, lightBleedCost, heavyBleedCost, fractureCost); -1 = cannot treat it.
+        CAR_FIRST_AID_KIT = ITEM_REGISTER.registerItem("car_first_aid_kit", properties -> new ItemMedkit(properties.durability(220), 3000, 1, 50, -1, -1));
+        IFAK = ITEM_REGISTER.registerItem("ifak", properties -> new ItemMedkit(properties.durability(300), 3000, 1, 30, -1, -1));
+        AFAK = ITEM_REGISTER.registerItem("afak", properties -> new ItemMedkit(properties.durability(400), 3000, 1, 30, 170, -1));
+        FIELD_MEDKIT = ITEM_REGISTER.registerItem("field_medkit", properties -> new ItemMedkit(properties.durability(1800), 5000, 1, 40, 130, 50));
+        // CAT-style windlass tourniquet: one hand, faster than the improvised one, a few uses.
+        CAT_TOURNIQUET = ITEM_REGISTER.registerItem("cat_tourniquet", properties -> new ItemTreatment(
+                properties.durability(3),
+                stack -> new PartHealer(() -> 1, () -> 1, stack),
+                () -> 2000,
+                (part, missingHealth) -> InjuryEngine.isLimb(part.part) && part.bleedLevel != AbstractDamageablePart.BLEED_NONE,
+                RegistryObjects::tieTourniquet,
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.cat_tourniquet"
+        ));
+        // Hemostatic (combat) gauze: packs a heavy bleed anywhere, the junctional and torso wounds a tourniquet cannot reach, and
+        // is the dressing that lets a tourniquet come off.
+        HEMOSTATIC_GAUZE = ITEM_REGISTER.registerItem("hemostatic_gauze", properties -> new ItemTreatment(
+                properties.durability(3),
+                stack -> new PartHealer(() -> 1, () -> 1, stack),
+                () -> 3000,
+                (part, missingHealth) -> !part.isDestroyed() && (part.bleedLevel != AbstractDamageablePart.BLEED_NONE || part.hasTourniquet()),
+                context -> dress(context, AbstractDamageablePart.BLEED_HEAVY),
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.hemostatic_gauze"
+        ));
+        ALUMINUM_SPLINT = ITEM_REGISTER.registerItem("aluminum_splint", properties -> new ItemTreatment(
+                properties.durability(5),
+                stack -> new PartHealer(() -> 1, () -> 1, stack),
+                () -> 5000,
+                (part, missingHealth) -> part.fractured && !part.isDestroyed(),
+                context -> {
+                    if (InjuryEngine.fixFracture(context.getDamageablePart())) {
+                        context.getDamageModel().scheduleResync();
+                    }
+                },
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.aluminum_splint"
+        ));
+        // Closes dressed wounds for good (they cannot reopen any more) and takes a tourniquet off.
+        SUTURE_KIT = ITEM_REGISTER.registerItem("suture_kit", properties -> new ItemTreatment(
+                properties.durability(5),
+                stack -> new PartHealer(() -> 1, () -> 1, stack),
+                () -> 12000,
+                (part, missingHealth) -> !part.isDestroyed() && part.bleedLevel == AbstractDamageablePart.BLEED_NONE
+                        && (part.dressedWound != AbstractDamageablePart.BLEED_NONE || part.hasTourniquet()),
+                context -> {
+                    if (InjuryEngine.suture(context.getDamageablePart())) {
+                        context.getDamageModel().scheduleResync();
+                    }
+                },
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.suture_kit"
+        ));
+        // Surgery on a destroyed limb: back to 1 hit point, the limb's maximum permanently reduced (until death).
+        SURGICAL_KIT = ITEM_REGISTER.registerItem("surgical_kit", properties -> new ItemTreatment(
+                properties.durability(5),
+                stack -> new PartHealer(() -> 1, () -> 1, stack),
+                () -> 16000,
+                (part, missingHealth) -> part.isDestroyed(),
+                context -> operate(context, 0.30F),
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.surgical_kit"
+        ));
+        FIELD_SURGICAL_KIT = ITEM_REGISTER.registerItem("field_surgical_kit", properties -> new ItemTreatment(
+                properties.durability(15),
+                stack -> new PartHealer(() -> 1, () -> 1, stack),
+                () -> 16000,
+                (part, missingHealth) -> part.isDestroyed(),
+                context -> operate(context, 0.15F),
+                RegistryObjects::getBandageUseSound,
+                "firstaid.tooltip.field_surgical_kit"
+        ));
         ADRENALINE_INJECTOR = ITEM_REGISTER.registerItem("adrenaline_injector", ItemAdrenalineInjector::new);
         MORPHINE_INJECTOR = ITEM_REGISTER.registerItem("morphine_injector", ItemMorphineInjector::new);
         MORPHINE = ITEM_REGISTER.registerItem("morphine", ItemMorphine::new);
@@ -188,9 +275,32 @@ public class RegistryObjects {
         return BANDAGE_USE.value();
     }
 
-    private static void closeBleed(PartHealingContext context, byte strongestLevelStopped) {
-        if (InjuryEngine.stopBleed(context.getDamageablePart(), strongestLevelStopped)) {
+    /** Dresses a bleed up to {@code strongest} and, if the wound under a tourniquet is no worse than that, takes the tourniquet off. */
+    private static void dress(PartHealingContext context, byte strongest) {
+        AbstractDamageablePart part = context.getDamageablePart();
+        boolean changed = InjuryEngine.stopBleed(part, strongest);
+        changed |= InjuryEngine.convertTourniquet(part, strongest);
+        if (changed) {
             context.getDamageModel().scheduleResync();
+        }
+    }
+
+    private static boolean lightTourniquet(AbstractDamageablePart part) {
+        return part.hasTourniquet() && part.dressedWound <= AbstractDamageablePart.BLEED_LIGHT;
+    }
+
+    private static void tieTourniquet(PartHealingContext context) {
+        if (InjuryEngine.applyTourniquet(context.getDamageablePart())) {
+            context.getDamageModel().scheduleResync();
+        }
+    }
+
+    private static void operate(PartHealingContext context, float penalty) {
+        if (InjuryEngine.surgery(context.getDamageablePart(), penalty)) {
+            context.getDamageModel().scheduleResync();
+            if (context.getPlayer() != null && context.getDamageModel() instanceof ichttt.mods.firstaid.common.damagesystem.PlayerDamageModel model) {
+                model.syncVanillaHealth(context.getPlayer());
+            }
         }
     }
 }

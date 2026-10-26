@@ -564,4 +564,102 @@ public class FirstAidGameTests {
             });
         });
     }
+
+    // ------------------------------------------------------------------ wound care (marker realistic-wound-care)
+
+    @GameTest(template = EMPTY)
+    public static void woundCareRules(GameTestHelper helper) {
+        // 2 h at 20x compression is 6 game minutes
+        helper.assertTrue(InjuryEngine.compressedTicks(InjuryEngine.TOURNIQUET_SAFE_REAL_SECONDS, 20.0D) == 6 * 60 * 20, "compressed safe time");
+        helper.assertTrue(InjuryEngine.ischemiaStage(-1, 100, 300) == 0 && InjuryEngine.ischemiaStage(99, 100, 300) == 0, "safe");
+        helper.assertTrue(InjuryEngine.ischemiaStage(100, 100, 300) == 1 && InjuryEngine.ischemiaStage(300, 100, 300) == 2, "ischemia, loss");
+
+        PlayerDamageModel model = new PlayerDamageModel();
+        AbstractDamageablePart leg = model.LEFT_LEG;
+        leg.bleedLevel = AbstractDamageablePart.BLEED_HEAVY;
+        helper.assertTrue(InjuryEngine.applyTourniquet(leg), "tourniquet on a bleeding leg");
+        helper.assertTrue(leg.bleedLevel == AbstractDamageablePart.BLEED_NONE && leg.dressedWound == AbstractDamageablePart.BLEED_HEAVY && leg.tourniquetTicks == 0, "bleed stops under the tourniquet");
+        helper.assertFalse(InjuryEngine.convertTourniquet(leg, AbstractDamageablePart.BLEED_LIGHT), "a bandage cannot take a tourniquet off a heavy wound");
+        helper.assertTrue(InjuryEngine.convertTourniquet(leg, AbstractDamageablePart.BLEED_HEAVY), "hemostatic gauze converts it");
+        helper.assertTrue(!leg.hasTourniquet() && leg.dressedWound == AbstractDamageablePart.BLEED_HEAVY, "converted: dressed, no tourniquet");
+        helper.assertTrue(InjuryEngine.suture(leg) && leg.dressedWound == AbstractDamageablePart.BLEED_NONE, "suture closes the wound");
+        helper.assertFalse(InjuryEngine.applyTourniquet(model.BODY), "no tourniquet on the torso");
+
+        // destroyed limb: no healing, surgery brings it back at a reduced maximum
+        AbstractDamageablePart arm = model.RIGHT_ARM;
+        arm.currentHealth = 0.0F;
+        helper.assertTrue(arm.isDestroyed(), "empty limb is destroyed");
+        arm.heal(30.0F, null, false);
+        helper.assertTrue(arm.currentHealth == 0.0F, "heal() refuses a destroyed limb");
+        helper.assertTrue(InjuryEngine.surgery(arm, 0.3F), "surgery");
+        near(helper, "after surgery", arm.currentHealth, InjuryEngine.SURGERY_RESTORED_HEALTH, 0.001F);
+        arm.heal(1000.0F, null, false);
+        near(helper, "capped at the reduced maximum", arm.currentHealth, arm.getMaxHealth() * 0.7F, 0.01F);
+
+        // the new state is saved
+        model.LEFT_FOOT.tourniquetTicks = 1234;
+        model.LEFT_FOOT.dressedWound = AbstractDamageablePart.BLEED_LIGHT;
+        PlayerDamageModel loaded = new PlayerDamageModel();
+        loaded.deserializeNBT(model.serializeNBT());
+        helper.assertTrue(loaded.LEFT_FOOT.tourniquetTicks == 1234 && loaded.LEFT_FOOT.dressedWound == AbstractDamageablePart.BLEED_LIGHT, "tourniquet/wound saved");
+        near(helper, "surgery penalty saved", loaded.RIGHT_ARM.surgeryPenalty, 0.3F, 0.0001F);
+        helper.assertTrue(loaded.HEAD.tourniquetTicks == -1, "no phantom tourniquet");
+        helper.succeed();
+    }
+
+    @GameTest(template = EMPTY)
+    public static void medkitPaysForBleedThenHitPoints(GameTestHelper helper) {
+        ichttt.mods.firstaid.common.items.ItemMedkit afak = (ichttt.mods.firstaid.common.items.ItemMedkit) RegistryObjects.AFAK.get();
+        ichttt.mods.firstaid.common.items.ItemMedkit car = (ichttt.mods.firstaid.common.items.ItemMedkit) RegistryObjects.CAR_FIRST_AID_KIT.get();
+        PlayerDamageModel model = new PlayerDamageModel();
+        AbstractDamageablePart body = model.BODY;
+        body.currentHealth = body.getMaxHealth() - 40.0F;
+        body.bleedLevel = AbstractDamageablePart.BLEED_HEAVY;
+
+        var plan = afak.plan(body, 400);
+        helper.assertTrue(plan.closeBleed() == AbstractDamageablePart.BLEED_HEAVY && plan.healHp() == 40, "full kit: heavy bleed then 40 HP, was " + plan);
+        helper.assertTrue(plan.cost(afak) == 170 + 40, "cost = heavy bleed + hit points");
+        var poor = afak.plan(body, 100);
+        helper.assertTrue(poor.closeBleed() == AbstractDamageablePart.BLEED_NONE && poor.healHp() == 40, "too little left for the bleed: only hit points");
+        helper.assertFalse(car.canTreat(model.HEAD) , "nothing to do on a full head");
+        body.currentHealth = body.getMaxHealth();
+        helper.assertFalse(car.plan(body, 220).cost(car) > 0, "a car kit cannot close a heavy bleed");
+        model.LEFT_ARM.currentHealth = 0.0F;
+        helper.assertFalse(afak.canTreat(model.LEFT_ARM), "no medkit on a destroyed limb");
+        helper.succeed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void dressedWoundReopensOnAHitNotOnItsOwn(GameTestHelper helper) {
+        ServerPlayer player = survivalPlayer(helper);
+        PlayerDamageModel after = model(helper, player);
+        after.LEFT_ARM.dressedWound = AbstractDamageablePart.BLEED_HEAVY;
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(after.LEFT_ARM.bleedLevel == AbstractDamageablePart.BLEED_NONE, "a dressed wound does not reopen by itself");
+            PlayerDamageModel before = new PlayerDamageModel();
+            before.deserializeNBT(after.serializeNBT());
+            after.LEFT_ARM.currentHealth -= 2.0F;
+            InjuryEngine.onDamaged(player, after, before, player.damageSources().generic());
+            helper.assertTrue(after.LEFT_ARM.bleedLevel == AbstractDamageablePart.BLEED_HEAVY && after.LEFT_ARM.dressedWound == AbstractDamageablePart.BLEED_NONE, "a hit reopens it");
+            leave(helper, player);
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void tourniquetLeftOnTooLongKillsTheLimb(GameTestHelper helper) {
+        ServerPlayer player = survivalPlayer(helper);
+        PlayerDamageModel model = model(helper, player);
+        int safe = InjuryEngine.compressedTicks(InjuryEngine.TOURNIQUET_SAFE_REAL_SECONDS);
+        int loss = InjuryEngine.compressedTicks(InjuryEngine.TOURNIQUET_LIMB_LOSS_REAL_SECONDS);
+        model.RIGHT_LEG.tourniquetTicks = safe;
+        model.LEFT_LEG.tourniquetTicks = loss - 1;
+        float start = model.RIGHT_LEG.currentHealth;
+        helper.runAfterDelay(45, () -> {
+            helper.assertTrue(model.RIGHT_LEG.currentHealth < start, "past the safe time the limb loses hit points");
+            helper.assertTrue(model.LEFT_LEG.isDestroyed(), "past the loss time the limb is destroyed");
+            leave(helper, player);
+            helper.succeed();
+        });
+    }
 }

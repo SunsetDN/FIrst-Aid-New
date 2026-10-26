@@ -1020,6 +1020,8 @@ implements LookupReloadListener {
         for (AbstractDamageablePart part : this) {
             part.bleedLevel = AbstractDamageablePart.BLEED_NONE;
             part.fractured = false;
+            part.dressedWound = AbstractDamageablePart.BLEED_NONE;
+            part.tourniquetTicks = -1;
         }
         this.fractureEffectSignature = -1;
     }

@@ -3,7 +3,6 @@
   "item.firstaid.bandage": "붕대",
   "item.firstaid.plaster": "반창고",
   "item.firstaid.morphine": "모르핀",
-
   "firstaid.gui.head": "머리",
   "firstaid.gui.left_arm": "왼쪽 팔",
   "firstaid.gui.left_leg": "왼쪽 다리",
@@ -19,10 +18,8 @@
   "firstaid.gui.sleep_heal_amount": "잠이 체력의 %s%를 회복시킵니다",
   "firstaid.gui.tutorial": "FirstAid 튜토리얼",
   "firstaid.gui.healthscreen": "FirstAid 체력 창",
-
   "firstaid.tooltip.morphine": "%s 동안 체력 디버프를 억제합니다",
   "firstaid.tooltip.healer": "최대 %s 하트를 회복합니다, 반 개당 %s개가 필요합니다",
-
   "firstaid.tutorial.notice": "튜토리얼 - 별 의미 없음",
   "firstaid.tutorial.hint": "%s을(를) 눌러 튜토리얼을 불러옵니다",
   "firstaid.tutorial.welcome": "FirstAid 모드에 오신 걸 환영합니다! 이 튜토리얼은 당신에게 이 모드를 안내하고 기존과 다른 메커니즘을 설명할 것입니다.",
@@ -36,7 +33,6 @@
   "firstaid.tutorial.line7": "이 경우에, 플레이어는 다른 부위의 체력 상태에 관계없이 죽을 것입니다.",
   "firstaid.tutorial.line8": "현재 체력을 확인하고 활성화 된 회복수단을 확인하고 싶다면, %s를 눌러 해당 인터페이스를 여세요.",
   "firstaid.tutorial.end": "자 이제 튜토리얼이 끝났습니다.",
-
   "firstaid.config.damagesystem": "데미지 시스템",
   "firstaid.config.damagesystem.tooltip": "신체 부위의 최대 체력에 관한 설정입니다. 2 = 하트 1칸",
   "firstaid.config.overlay": "오버레이",
@@ -87,9 +83,7 @@
   "firstaid.config.xoffset.tooltip": "X축의 오프셋",
   "firstaid.config.yoffset": "Y축 오프셋",
   "firstaid.config.yoffset.tooltip": "Y축의 오프셋",
-
   "keybinds.show_wounds": "부상 보기",
-
   "subtitles.debuff.heartbeat": "심장이 두근거림",
   "firstaid.gui.next_heal": "다음 회복 : %s 초",
   "effect.firstaid.morphine": "모르핀",
@@ -98,11 +92,32 @@
   "item.firstaid.tourniquet": "지혈대",
   "item.firstaid.splint": "부목",
   "item.firstaid.trauma_kit": "외상 키트",
-  "firstaid.tooltip.tourniquet": "팔, 다리, 발의 모든 출혈을 멈춥니다",
+  "firstaid.tooltip.tourniquet": "팔, 다리, 발의 출혈을 즉시 멈춤. 안전 시간 안에 풀어야 함(지혈 거즈, 가벼운 상처는 붕대). 넘기면 팔다리가 죽음",
   "firstaid.tooltip.splint": "골절된 팔, 다리, 발을 고정합니다",
   "firstaid.tooltip.trauma_kit": "선택한 부위를 빠르게 회복시키고 모든 출혈을 멈춥니다",
   "death.attack.firstaid_bleed_out": "%1$s 과다출혈로 사망했습니다",
   "firstaid.command.injury.bleed": "%1$s의 %2$s 출혈 단계를 %3$s(으)로 설정했습니다 (0 없음, 1 경미, 2 심각)",
   "firstaid.command.injury.fracture": "%1$s의 %2$s 골절을 %3$s(으)로 설정했습니다",
-  "firstaid.command.injury.clear": "%s의 모든 출혈과 골절을 치료했습니다"
+  "firstaid.command.injury.clear": "%s의 모든 출혈과 골절을 치료했습니다",
+  "item.firstaid.car_first_aid_kit": "차량용 구급상자",
+  "item.firstaid.ifak": "개인 응급처치 키트 (IFAK)",
+  "item.firstaid.afak": "고급 응급처치 키트 (AFAK)",
+  "item.firstaid.field_medkit": "야전 의무 키트",
+  "item.firstaid.cat_tourniquet": "전투용 지혈대 (CAT)",
+  "item.firstaid.hemostatic_gauze": "지혈 거즈",
+  "item.firstaid.aluminum_splint": "알루미늄 부목",
+  "item.firstaid.suture_kit": "봉합 키트",
+  "item.firstaid.surgical_kit": "수술 키트",
+  "item.firstaid.field_surgical_kit": "야전 수술 키트",
+  "firstaid.tooltip.medkit.resource": "남은 자원: %s / %s HP",
+  "firstaid.tooltip.medkit.light_bleed": "가벼운 출혈 지혈 (%s)",
+  "firstaid.tooltip.medkit.heavy_bleed": "심한 출혈 지혈 (%s)",
+  "firstaid.tooltip.medkit.fracture": "골절 고정 (%s)",
+  "firstaid.tooltip.medkit.no_destroyed": "파괴된 부위는 치료할 수 없음",
+  "firstaid.tooltip.cat_tourniquet": "팔다리 출혈을 즉시 멈춤. 안전 시간 안에 풀어야 함(지혈 거즈, 가벼운 상처는 붕대). 넘기면 팔다리가 죽음",
+  "firstaid.tooltip.hemostatic_gauze": "어느 부위든 가벼운/심한 출혈을 막고, 지혈대를 풀 수 있게 함",
+  "firstaid.tooltip.aluminum_splint": "골절 고정, 여러 번 사용",
+  "firstaid.tooltip.suture_kit": "드레싱한 상처를 완전히 봉합(다시 터지지 않음)하고 지혈대를 풂",
+  "firstaid.tooltip.surgical_kit": "파괴된 부위를 1 HP로 복구, 최대 HP가 사망 전까지 30% 감소",
+  "firstaid.tooltip.field_surgical_kit": "파괴된 부위를 1 HP로 복구, 최대 HP가 사망 전까지 15% 감소"
 }

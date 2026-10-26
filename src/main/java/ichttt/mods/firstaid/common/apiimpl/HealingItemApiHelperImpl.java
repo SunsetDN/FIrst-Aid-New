@@ -54,7 +54,8 @@ public class HealingItemApiHelperImpl extends HealingItemApiHelper {
 
     @Override
     public boolean needsHealing(AbstractDamageablePart part) {
-        return !CommonUtils.isPartVisuallyFull(part);
+        // Destroyed limbs need surgery; a limb that had surgery is full at its reduced maximum
+        return !part.isDestroyed() && part.currentHealth < part.effectiveMaxHealth() - 0.01F && !CommonUtils.isPartVisuallyFull(part);
     }
 
     private static boolean canUseHealingItem(Player player, ItemHealing itemHealing) {

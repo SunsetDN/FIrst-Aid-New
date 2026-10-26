@@ -24,6 +24,7 @@ import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.api.enums.EnumPlayerPart;
 import ichttt.mods.firstaid.client.gui.FlashStateManager;
 import ichttt.mods.firstaid.common.EventHandler;
+import ichttt.mods.firstaid.common.health.InjuryEngine;
 import ichttt.mods.firstaid.common.util.CommonUtils;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.Minecraft;
@@ -72,6 +73,10 @@ public final class HealthRenderUtils {
     private static final int BLEED_LIGHT_COLOR = 0xFF6060;
     private static final int BLEED_HEAVY_COLOR = 0xFF1E1E;
     private static final int FRACTURE_COLOR = 0xFFD34D;
+    private static final int TOURNIQUET_SAFE_COLOR = 0xFFB040;
+    private static final int TOURNIQUET_ISCHEMIA_COLOR = 0xFF3030;
+    private static final int DRESSED_COLOR = 0xD8D8D8;
+    private static final int DESTROYED_COLOR = 0x808080;
 
     /**
      * Draws the injury markers of a part right aligned to {@code rightX}: B = light bleed, BB = heavy bleed, F = fracture.
@@ -79,6 +84,24 @@ public final class HealthRenderUtils {
      */
     public static void drawInjuryMarkers(GuiGraphics guiGraphics, Font font, AbstractDamageablePart damageablePart, int rightX, int y) {
         int x = rightX;
+        // X destroyed (needs surgery), T tourniquet with minutes left before ischemia, W dressed wound that can reopen
+        if (damageablePart.isDestroyed()) {
+            x -= font.width("X");
+            guiGraphics.drawString(font, "X", x, y, DESTROYED_COLOR, false);
+            x -= 3;
+        }
+        if (damageablePart.hasTourniquet()) {
+            int safe = InjuryEngine.compressedTicks(InjuryEngine.TOURNIQUET_SAFE_REAL_SECONDS);
+            int left = safe - damageablePart.tourniquetTicks;
+            String marker = left > 0 ? "T" + Mth.ceil(left / 1200.0F) : "T!";
+            x -= font.width(marker);
+            guiGraphics.drawString(font, marker, x, y, left > 0 ? TOURNIQUET_SAFE_COLOR : TOURNIQUET_ISCHEMIA_COLOR, false);
+            x -= 3;
+        } else if (damageablePart.dressedWound != AbstractDamageablePart.BLEED_NONE) {
+            x -= font.width("W");
+            guiGraphics.drawString(font, "W", x, y, DRESSED_COLOR, false);
+            x -= 3;
+        }
         if (damageablePart.fractured) {
             x -= font.width("F");
             guiGraphics.drawString(font, "F", x, y, FRACTURE_COLOR, false);

@@ -134,7 +134,7 @@ public class HealthDistribution {
             return;
         }
 
-        float limit = getNaturalRegenLimit(target);
+        float limit = Math.min(getNaturalRegenLimit(target), target.effectiveMaxHealth());
         float healAmount = Math.min(health, Math.max(0.0F, limit - target.currentHealth));
         if (healAmount <= 0.0F) {
             return;
@@ -213,7 +213,7 @@ public class HealthDistribution {
         if (part == null || (FirstAid.naturalRegenMode == FirstAid.NaturalRegenMode.LIMITED2 && part.currentHealth <= 0.0F)) {
             return false;
         }
-        return getNaturalRegenLimit(part) - part.currentHealth > 0.0001F;
+        return !part.isDestroyed() && Math.min(getNaturalRegenLimit(part), part.effectiveMaxHealth()) - part.currentHealth > 0.0001F;
     }
 
     private static float getNaturalRegenLimit(AbstractDamageablePart part) {

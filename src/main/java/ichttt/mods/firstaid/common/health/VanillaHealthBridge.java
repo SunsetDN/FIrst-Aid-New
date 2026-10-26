@@ -2,6 +2,7 @@
 package ichttt.mods.firstaid.common.health;
 
 import ichttt.mods.firstaid.FirstAid;
+import ichttt.mods.firstaid.api.damagesystem.AbstractDamageablePart;
 import ichttt.mods.firstaid.FirstAidConfig;
 import ichttt.mods.firstaid.api.damagesystem.AbstractPlayerDamageModel;
 import ichttt.mods.firstaid.api.distribution.IDamageDistributionAlgorithm;
@@ -158,7 +159,15 @@ public final class VanillaHealthBridge {
                 if (FirstAidConfig.GENERAL.debug.get()) {
                     CommonUtils.debugLogStacktrace("External setHealth healing: " + vanillaHeal);
                 }
-                HealthDistribution.addRandomHealth(HealthUnits.toEngine(vanillaHeal, player, model), player, true);
+                if (requested >= player.getMaxHealth() - 0.001F) {
+                    // A write to full health is a deliberate full restore by another mod (admin heal, totem-like effects): it
+                    // also brings back destroyed limbs, which no ordinary healing does (they need surgery). Surgery penalties stay.
+                    for (AbstractDamageablePart part : model) {
+                        part.currentHealth = part.effectiveMaxHealth();
+                    }
+                } else {
+                    HealthDistribution.addRandomHealth(HealthUnits.toEngine(vanillaHeal, player, model), player, true);
+                }
             }
             default -> FirstAid.LOGGER.warn("Unhandled external health intent {}", intent);
         }
